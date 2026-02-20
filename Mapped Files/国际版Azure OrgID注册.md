@@ -1,9 +1,9 @@
 ---
 title: "国际版Azure OrgID注册"
 path: "/Users/zhangpeng/Documents/国际版Azure OrgID注册.pdf"
-size: 245543
-created: 2025-05-07T05:16:23.928Z
-modified: 2025-05-07T05:16:23.962Z
+size: 0.23 MB
+created: 2025-05-07
+modified: 2025-05-07
 type: ".pdf"
 ---
 

@@ -1,9 +1,9 @@
 ---
 title: "毛泽东选集一至七卷 (毛泽东) (Z-Library)"
 path: "/Users/zhangpeng/Documents/毛泽东选集一至七卷 (毛泽东) (Z-Library).epub"
-size: 2918518
-created: 2025-11-13T01:17:35.000Z
-modified: 2025-11-13T01:17:36.000Z
+size: 2.78 MB
+created: 2025-11-13
+modified: 2025-11-13
 type: ".epub"
 ---
 

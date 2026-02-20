@@ -1,9 +1,9 @@
 ---
 title: "基于NLWeb构建 Agentic Web"
 path: "/Users/zhangpeng/Documents/解决方案库/基于NLWeb构建 Agentic Web.mp4"
-size: 60606800
-created: 2025-07-23T07:36:36.000Z
-modified: 2025-07-23T07:36:36.000Z
+size: 57.80 MB
+created: 2025-07-23
+modified: 2025-07-23
 type: ".mp4"
 ---
 

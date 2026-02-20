@@ -1,9 +1,9 @@
 ---
 title: "Azure - Compliance Offerings (September 2025)"
 path: "/Users/zhangpeng/Documents/Azure - Compliance Offerings (September 2025).pdf"
-size: 868485
-created: 2025-11-17T01:19:05.581Z
-modified: 2025-11-17T01:19:05.583Z
+size: 0.83 MB
+created: 2025-11-17
+modified: 2025-11-17
 type: ".pdf"
 ---
 

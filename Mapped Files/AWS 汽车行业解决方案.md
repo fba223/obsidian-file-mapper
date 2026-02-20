@@ -1,9 +1,9 @@
 ---
 title: "AWS 汽车行业解决方案"
 path: "/Users/zhangpeng/Documents/解决方案库/AWS 汽车行业解决方案.pdf"
-size: 18821729
-created: 2025-09-23T03:24:46.000Z
-modified: 2025-09-23T03:24:46.000Z
+size: 17.95 MB
+created: 2025-09-23
+modified: 2025-09-23
 type: ".pdf"
 ---
 

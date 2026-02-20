@@ -1,9 +1,9 @@
 ---
 title: "Github copilot update.mp4"
 path: "/Users/zhangpeng/Documents/解决方案库/Github copilot update.mp4.mp4"
-size: 185744445
-created: 2025-07-18T08:32:37.000Z
-modified: 2025-07-18T08:32:38.000Z
+size: 177.14 MB
+created: 2025-07-18
+modified: 2025-07-18
 type: ".mp4"
 ---
 

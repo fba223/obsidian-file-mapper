@@ -1,9 +1,9 @@
 ---
 title: "RH134V9教材_redhat2023(OCR)"
 path: "/Users/zhangpeng/Documents/RHCE8教材/RH134V9教材_redhat2023(OCR).pdf"
-size: 258199625
-created: 2025-04-08T03:11:40.000Z
-modified: 2025-04-08T03:18:12.000Z
+size: 246.24 MB
+created: 2025-04-08
+modified: 2025-04-08
 type: ".pdf"
 ---
 

@@ -1,9 +1,9 @@
 ---
 title: "The Business Guide to AI Solution"
 path: "/Users/zhangpeng/Documents/解决方案库/The Business Guide to AI Solution.pdf"
-size: 5799542
-created: 2025-08-20T01:33:46.000Z
-modified: 2025-08-20T01:33:46.000Z
+size: 5.53 MB
+created: 2025-08-20
+modified: 2025-08-20
 type: ".pdf"
 ---
 

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Mapped Files/_Data&AI Update_20260203.PDF.md",
+                "file": "Mapped Files/《通用服务器政府采购需求标准（征求意见稿）》.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "_Data&AI Update_20260203.PDF"
+              "title": "《通用服务器政府采购需求标准（征求意见稿）》"
             }
           }
         ]
@@ -78,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 406.5
+    "width": 270.5
   },
   "right": {
     "id": "69535a7dbcd94e40",
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Mapped Files/_Data&AI Update_20260203.PDF.md",
+                "file": "Mapped Files/《通用服务器政府采购需求标准（征求意见稿）》.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "_Data&AI Update_20260203.PDF 的反向链接列表"
+              "title": "《通用服务器政府采购需求标准（征求意见稿）》 的反向链接列表"
             }
           },
           {
@@ -180,35 +180,37 @@
       "bases:新建数据库": false
     }
   },
-  "active": "4673dff28a391483",
+  "active": "aadd13745c4425c1",
   "lastOpenFiles": [
-    "main.ts",
-    "tests/new-features.js",
+    "tests/sync-settings.js",
+    "未命名.base",
+    "Mapped Files/OSPA转CAE案例20241020.md",
     "Mapped Files/“5G+车联网”安全：需求与挑战.md",
-    "Mapped Files/《数据挖掘与数据化运营实战 思路、方法、技巧与应用》.(卢辉).[PDF]@jb51.net.md",
-    "Mapped Files/【#数字经济#】中国数字经济发展研究报告 信通院 2023.md",
-    "Mapped Files/《通用服务器政府采购需求标准（征求意见稿）》.md",
-    "Mapped Files/[谁说菜鸟不会数据分析(.入门篇)].张文霖.全彩版.md",
     "Mapped Files/_Data&AI Update_20260203.PDF.md",
+    "Mapped Files/[谁说菜鸟不会数据分析(.入门篇)].张文霖.全彩版.md",
     "Mapped Files/《操作系统政府采购需求标准（征求意见稿）》.md",
     "Mapped Files/《蛊真人》作者：蛊真人.md",
-    "Mapped Files/The Accidental CTO Book.md",
-    "Mapped Files/The Azure Cloud Native Architecture Mapbook.md",
-    "Mapped Files/The Business Guide to AI Solution.md",
-    "Mapped Files/附件3：聚云起账单系统用户使用手册-v2.0.md",
-    "Mapped Files/附件2：国际版mpn id(2).md",
-    "Mapped Files/附件1：国际版账户激活步骤2.0.md",
-    "Mapped Files/阿里云迁移Azure Site Recovery(1).md",
-    "Mapped Files/通过Azure Portal创建支持Ticket说明(Case).md",
-    "Mapped Files/适用于架构师的 Azure--第三版.md",
-    "Mapped Files/资源及选型规划.md",
-    "Mapped Files/谷歌 Gemini AI Pro 五分钟完成注册  免费一年.md",
-    "Mapped Files/语音翻译相关问题反馈-251202.md",
-    "Mapped Files/诡秘之主 (爱潜水的乌贼) (Z-Library).md",
-    "Mapped Files/张鹏SC-400.md",
-    "Mapped Files/张鹏SC-300.md",
-    "Mapped Files/张鹏AZ-104.md",
-    "Mapped Files/认证墙.md",
+    "Mapped Files/《数据挖掘与数据化运营实战 思路、方法、技巧与应用》.(卢辉).[PDF]@jb51.net.md",
+    "Mapped Files/《Playwright MCP深入实践：构建智能体浏览器的.md",
+    "Mapped Files/The Excalidraw-Obsidian Showcase： 57 key features in just 17 minutes [P_Q6avJGoWI].f616.md",
+    "Mapped Files/V2_4_Kubernetes_on_MSFT_Azure_Spec_Audit_Checklist_w_PREVIEW.md",
+    "Mapped Files/VLAN，TRUNK,VTP,DTP，本征VLAN.md",
+    "Mapped Files/What’s new with Databricks Serverless - out.PDF.md",
+    "Mapped Files/~$科技 DevOps 实践章程.md",
+    "Mapped Files/000-01 第一章 政府采购是什么.md",
+    "Mapped Files/000-02 第二章 政府采购资格条件解读.md",
+    "Mapped Files/《通用服务器政府采购需求标准（征求意见稿）》.md",
+    "Mapped Files/香港银行在线开户指南：汇丰、中银、中信.md",
+    "Mapped Files/金字塔原理麦肯锡40年经典培训教材 ([美]芭芭拉·明托 [[美]芭芭拉·明托]) (Z-Library).md",
+    "Mapped Files/金字塔原理2 (芭芭拉·明托) (Z-Library).md",
+    "Mapped Files/美国反对美国 （America against America） (王沪宁) (Z-Library).md",
+    "Mapped Files/简历_售前工程师_张鹏.md",
+    "Mapped Files/笔记的方法 (刘少楠, 刘白光) (Z-Library).md",
+    "Mapped Files/查看计费文档.md",
+    "Mapped Files/接受 Microsoft CSP 关系.md",
+    "Mapped Files/装饰设计合同.md",
+    "main.ts",
+    "tests/new-features.js",
     "Mapped Files"
   ]
 }

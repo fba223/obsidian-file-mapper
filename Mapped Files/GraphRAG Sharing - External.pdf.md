@@ -1,9 +1,9 @@
 ---
 title: "GraphRAG Sharing - External.pdf"
 path: "/Users/zhangpeng/Documents/解决方案库/GraphRAG Sharing - External.pdf.pdf"
-size: 3257264
-created: 2025-07-18T08:24:38.000Z
-modified: 2025-07-18T08:24:38.000Z
+size: 3.11 MB
+created: 2025-07-18
+modified: 2025-07-18
 type: ".pdf"
 ---
 

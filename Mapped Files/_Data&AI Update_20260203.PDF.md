@@ -1,9 +1,9 @@
 ---
 title: "_Data&AI Update_20260203.PDF"
 path: "/Users/zhangpeng/Documents/_Data&AI Update_20260203.PDF"
-size: 6869265
-created: 2026-02-04T05:14:01.695Z
-modified: 2026-02-04T05:14:02.013Z
+size: 6.55 MB
+created: 2026-02-04
+modified: 2026-02-04
 type: ".pdf"
 ---
 

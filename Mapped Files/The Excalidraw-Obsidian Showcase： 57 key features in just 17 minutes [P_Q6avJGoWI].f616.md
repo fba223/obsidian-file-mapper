@@ -1,9 +1,9 @@
 ---
 title: "The Excalidraw-Obsidian Showcase： 57 key features in just 17 minutes [P_Q6avJGoWI].f616"
 path: "/Users/zhangpeng/Documents/The Excalidraw-Obsidian Showcase： 57 key features in just 17 minutes [P_Q6avJGoWI].f616.mp4"
-size: 203251871
-created: 2024-05-22T06:20:03.000Z
-modified: 2024-05-22T06:20:03.000Z
+size: 193.84 MB
+created: 2024-05-22
+modified: 2024-05-22
 type: ".mp4"
 ---
 

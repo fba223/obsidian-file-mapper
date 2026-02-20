@@ -1,9 +1,9 @@
 ---
 title: "Copilot Studio Lab1-Knowledge Upload"
 path: "/Users/zhangpeng/Documents/copilot studio/Copilot Studio Lab1-Knowledge Upload.pdf"
-size: 1180312
-created: 2025-06-10T08:10:10.004Z
-modified: 2025-06-10T08:10:10.331Z
+size: 1.13 MB
+created: 2025-06-10
+modified: 2025-06-10
 type: ".pdf"
 ---
 

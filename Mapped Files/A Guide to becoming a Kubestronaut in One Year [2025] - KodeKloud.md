@@ -1,9 +1,9 @@
 ---
 title: "A Guide to becoming a Kubestronaut in One Year [2025] - KodeKloud"
 path: "/Users/zhangpeng/Documents/解决方案库/A Guide to becoming a Kubestronaut in One Year [2025] - KodeKloud.pdf"
-size: 13381806
-created: 2025-07-16T02:09:18.000Z
-modified: 2025-07-16T02:09:18.000Z
+size: 12.76 MB
+created: 2025-07-16
+modified: 2025-07-16
 type: ".pdf"
 ---
 

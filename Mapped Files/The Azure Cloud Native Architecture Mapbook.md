@@ -1,9 +1,9 @@
 ---
 title: "The Azure Cloud Native Architecture Mapbook"
 path: "/Users/zhangpeng/Documents/The Azure Cloud Native Architecture Mapbook.pdf"
-size: 22858414
-created: 2025-11-17T02:14:49.054Z
-modified: 2025-11-17T02:14:49.084Z
+size: 21.80 MB
+created: 2025-11-17
+modified: 2025-11-17
 type: ".pdf"
 ---
 

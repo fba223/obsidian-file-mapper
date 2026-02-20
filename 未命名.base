@@ -1,0 +1,9 @@
+views:
+  - type: table
+    name: 表格
+    order:
+      - file.name
+      - file.path
+      - type
+    columnSize:
+      file.path: 450

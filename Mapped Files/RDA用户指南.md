@@ -1,9 +1,9 @@
 ---
 title: "RDA用户指南"
 path: "/Users/zhangpeng/Documents/解决方案库/华为云迁移认证/RDA用户指南.pdf"
-size: 3623808
-created: 2025-04-03T08:46:56.000Z
-modified: 2025-04-03T08:46:56.000Z
+size: 3.46 MB
+created: 2025-04-03
+modified: 2025-04-03
 type: ".pdf"
 ---
 

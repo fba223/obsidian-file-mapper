@@ -1,9 +1,9 @@
 ---
 title: "通过Azure Portal创建支持Ticket说明(Case)"
 path: "/Users/zhangpeng/Documents/通过Azure Portal创建支持Ticket说明(Case).pdf"
-size: 4414074
-created: 2025-01-07T01:51:08.334Z
-modified: 2025-01-07T01:51:08.631Z
+size: 4.21 MB
+created: 2025-01-07
+modified: 2025-01-07
 type: ".pdf"
 ---
 

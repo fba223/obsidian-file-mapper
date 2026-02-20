@@ -73,8 +73,8 @@ var DEFAULT_SETTINGS = {
     modifiedDate: "modified",
     fileType: "type"
   },
-  syncInterval: 30,
-  enabled: false,
+  syncDuration: 60,
+  autoSync: false,
   dateFormat: "YYYY-MM-DD",
   dateIncludeTime: false,
   sizeUnit: "KB"
@@ -89,7 +89,7 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
     return __async(this, null, function* () {
       yield this.loadSettings();
       this.addSettingTab(new FileMapperSettingTab(this.app, this));
-      if (this.settings.enabled) {
+      if (this.settings.autoSync) {
         this.startSync();
       }
     });
@@ -99,7 +99,7 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
   }
   startSync() {
     this.stopSync();
-    const intervalMs = this.settings.syncInterval * 60 * 1e3;
+    const intervalMs = this.settings.syncDuration * 60 * 1e3;
     this.syncTimer = window.setInterval(() => {
       this.syncFiles();
     }, intervalMs);
@@ -349,8 +349,8 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Enable File Mapping").setDesc("Enable automatic file mapping from source folders").addToggle((toggle) => toggle.setValue(this.plugin.settings.enabled).onChange((value) => __async(this, null, function* () {
-      this.plugin.settings.enabled = value;
+    new import_obsidian.Setting(containerEl).setName("Auto Sync").setDesc("Enable automatic file synchronization").addToggle((toggle) => toggle.setValue(this.plugin.settings.autoSync).onChange((value) => __async(this, null, function* () {
+      this.plugin.settings.autoSync = value;
       yield this.plugin.saveSettings();
       if (value) {
         this.plugin.startSync();
@@ -370,23 +370,20 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
       this.plugin.settings.fileExtensions = value;
       yield this.plugin.saveSettings();
     })));
-    const intervalSetting = new import_obsidian.Setting(containerEl).setName("Sync Interval").setDesc("How often to check for changes");
-    let intervalDisplay;
-    intervalSetting.descEl.createSpan({}, (span) => {
-      span.style.display = "inline-block";
-      span.style.marginLeft = "8px";
-      span.style.color = "var(--text-muted)";
-      intervalDisplay = span;
-      const mins = this.plugin.settings.syncInterval;
-      span.textContent = `(${mins} minute${mins !== 1 ? "s" : ""})`;
-    });
-    intervalSetting.addSlider((slider) => slider.setLimits(1, 60, 5).setValue(this.plugin.settings.syncInterval).onChange((value) => __async(this, null, function* () {
-      this.plugin.settings.syncInterval = value;
+    new import_obsidian.Setting(containerEl).setName("Auto Sync").setDesc("Enable automatic file synchronization").addToggle((toggle) => toggle.setValue(this.plugin.settings.autoSync).onChange((value) => __async(this, null, function* () {
+      this.plugin.settings.autoSync = value;
       yield this.plugin.saveSettings();
-      if (intervalDisplay) {
-        intervalDisplay.textContent = `(${value} minute${value !== 1 ? "s" : ""})`;
+      if (value) {
+        this.plugin.startSync();
+      } else {
+        this.plugin.stopSync();
       }
-      if (this.plugin.settings.enabled) {
+    })));
+    new import_obsidian.Setting(containerEl).setName("Sync Duration (minutes)").setDesc("How often to sync in minutes").addText((text) => text.setPlaceholder("60").setValue(String(this.plugin.settings.syncDuration)).onChange((value) => __async(this, null, function* () {
+      const num = parseInt(value, 10);
+      this.plugin.settings.syncDuration = isNaN(num) || num < 1 ? 60 : Math.min(num, 1440);
+      yield this.plugin.saveSettings();
+      if (this.plugin.settings.autoSync) {
         this.plugin.startSync();
       }
     })));

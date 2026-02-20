@@ -1,9 +1,9 @@
 ---
 title: "Azure PaaS层构建agent"
 path: "/Users/zhangpeng/Documents/解决方案库/Azure PaaS层构建agent.mp4"
-size: 62362743
-created: 2025-07-23T07:23:28.000Z
-modified: 2025-07-23T07:23:28.000Z
+size: 59.47 MB
+created: 2025-07-23
+modified: 2025-07-23
 type: ".mp4"
 ---
 

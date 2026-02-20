@@ -1,9 +1,9 @@
 ---
 title: "Copilot Studio Lab2-ServiceNow Integration"
 path: "/Users/zhangpeng/Documents/copilot studio/Copilot Studio Lab2-ServiceNow Integration.pdf"
-size: 7518042
-created: 2025-06-10T08:10:10.523Z
-modified: 2025-06-10T08:10:11.340Z
+size: 7.17 MB
+created: 2025-06-10
+modified: 2025-06-10
 type: ".pdf"
 ---
 

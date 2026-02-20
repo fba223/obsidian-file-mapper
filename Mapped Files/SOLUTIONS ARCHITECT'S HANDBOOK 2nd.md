@@ -1,9 +1,9 @@
 ---
 title: "SOLUTIONS ARCHITECT'S HANDBOOK 2nd"
 path: "/Users/zhangpeng/Documents/数据分析/SOLUTIONS ARCHITECT'S HANDBOOK 2nd.pdf"
-size: 20112809
-created: 2023-08-08T01:17:26.000Z
-modified: 2023-08-08T01:17:26.000Z
+size: 19.18 MB
+created: 2023-08-08
+modified: 2023-08-08
 type: ".pdf"
 ---
 

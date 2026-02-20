@@ -1,9 +1,9 @@
 ---
 title: "Azure AI Foundry Agent Service"
 path: "/Users/zhangpeng/Documents/解决方案库/Azure AI Foundry Agent Service.pdf"
-size: 6124597
-created: 2025-07-23T06:58:52.000Z
-modified: 2025-07-23T06:58:52.000Z
+size: 5.84 MB
+created: 2025-07-23
+modified: 2025-07-23
 type: ".pdf"
 ---
 

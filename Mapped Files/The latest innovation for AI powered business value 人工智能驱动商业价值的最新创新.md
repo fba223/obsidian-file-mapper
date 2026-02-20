@@ -1,9 +1,9 @@
 ---
 title: "The latest innovation for AI powered business value 人工智能驱动商业价值的最新创新"
 path: "/Users/zhangpeng/Documents/解决方案库/The latest innovation for AI powered business value 人工智能驱动商业价值的最新创新.pdf"
-size: 2986744
-created: 2025-07-21T01:26:01.000Z
-modified: 2025-07-21T01:26:01.000Z
+size: 2.85 MB
+created: 2025-07-21
+modified: 2025-07-21
 type: ".pdf"
 ---
 

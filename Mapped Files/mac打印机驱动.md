@@ -1,9 +1,9 @@
 ---
 title: "mac打印机驱动"
 path: "/Users/zhangpeng/Documents/mac打印机驱动.pdf"
-size: 329736
-created: 2025-04-27T09:58:52.000Z
-modified: 2025-04-27T09:58:52.000Z
+size: 0.31 MB
+created: 2025-04-27
+modified: 2025-04-27
 type: ".pdf"
 ---
 

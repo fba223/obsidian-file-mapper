@@ -1,9 +1,9 @@
 ---
 title: "广州佳莱国际EA to CSP说明手册v1"
 path: "/Users/zhangpeng/Documents/广州佳莱国际EA to CSP说明手册v1.docx"
-size: 270322
-created: 2025-03-27T08:58:34.000Z
-modified: 2025-03-28T05:46:58.000Z
+size: 0.26 MB
+created: 2025-03-27
+modified: 2025-03-28
 type: ".docx"
 ---
 

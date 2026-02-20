@@ -1,9 +1,9 @@
 ---
 title: "AZ-700 Exam - Free Actual Q&As, Page 1 _ ExamTopics"
 path: "/Users/zhangpeng/Documents/考试题库/AZ-700 Exam - Free Actual Q&As, Page 1 _ ExamTopics.pdf"
-size: 45423665
-created: 2024-12-09T01:03:31.000Z
-modified: 2025-06-03T08:33:06.000Z
+size: 43.32 MB
+created: 2024-12-09
+modified: 2025-06-03
 type: ".pdf"
 ---
 

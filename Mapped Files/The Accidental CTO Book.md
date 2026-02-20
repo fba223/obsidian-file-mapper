@@ -1,9 +1,9 @@
 ---
 title: "The Accidental CTO Book"
 path: "/Users/zhangpeng/Documents/The Accidental CTO Book.pdf"
-size: 3179991
-created: 2025-11-12T07:11:57.498Z
-modified: 2025-11-12T07:11:57.502Z
+size: 3.03 MB
+created: 2025-11-12
+modified: 2025-11-12
 type: ".pdf"
 ---
 

@@ -1,9 +1,9 @@
 ---
 title: "AWS 金融行业解决方案"
 path: "/Users/zhangpeng/Documents/解决方案库/AWS 金融行业解决方案.pdf"
-size: 12962195
-created: 2025-09-23T03:45:14.000Z
-modified: 2025-09-23T03:45:14.000Z
+size: 12.36 MB
+created: 2025-09-23
+modified: 2025-09-23
 type: ".pdf"
 ---
 

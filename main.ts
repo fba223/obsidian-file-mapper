@@ -12,8 +12,8 @@ interface FileMapperSettings {
     modifiedDate: string;
     fileType: string;
   };
-  syncInterval: number;
-  enabled: boolean;
+  autoSync: boolean;
+  syncDuration: number;
   dateFormat: string;
   dateIncludeTime: boolean;
   sizeUnit: string;
@@ -40,8 +40,8 @@ const DEFAULT_SETTINGS: FileMapperSettings = {
     modifiedDate: 'modified',
     fileType: 'type'
   },
-  syncInterval: 30,
-  enabled: false,
+  syncDuration: 60,
+  autoSync: false,
   dateFormat: 'YYYY-MM-DD',
   dateIncludeTime: false,
   sizeUnit: 'KB'
@@ -62,7 +62,7 @@ export default class FileMapperPlugin extends Plugin {
     await this.loadSettings();
     this.addSettingTab(new FileMapperSettingTab(this.app, this));
     
-    if (this.settings.enabled) {
+    if (this.settings.autoSync) {
       this.startSync();
     }
   }
@@ -73,7 +73,7 @@ export default class FileMapperPlugin extends Plugin {
 
   startSync() {
     this.stopSync();
-    const intervalMs = this.settings.syncInterval * 60 * 1000;
+    const intervalMs = this.settings.syncDuration * 60 * 1000;
     this.syncTimer = window.setInterval(() => {
       this.syncFiles();
     }, intervalMs);
@@ -338,12 +338,12 @@ class FileMapperSettingTab extends PluginSettingTab {
     containerEl.empty();
     
     new Setting(containerEl)
-      .setName('Enable File Mapping')
-      .setDesc('Enable automatic file mapping from source folders')
+      .setName('Auto Sync')
+      .setDesc('Enable automatic file synchronization')
       .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.enabled)
+        .setValue(this.plugin.settings.autoSync)
         .onChange(async (value) => {
-          this.plugin.settings.enabled = value;
+          this.plugin.settings.autoSync = value;
           await this.plugin.saveSettings();
           if (value) {
             this.plugin.startSync();
@@ -385,33 +385,35 @@ class FileMapperSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
     
-    const intervalSetting = new Setting(containerEl)
-      .setName('Sync Interval')
-      .setDesc('How often to check for changes');
+    new Setting(containerEl)
+      .setName('Auto Sync')
+      .setDesc('Enable automatic file synchronization')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.autoSync)
+        .onChange(async (value) => {
+          this.plugin.settings.autoSync = value;
+          await this.plugin.saveSettings();
+          if (value) {
+            this.plugin.startSync();
+          } else {
+            this.plugin.stopSync();
+          }
+        }));
     
-    let intervalDisplay: HTMLElement;
-    intervalSetting.descEl.createSpan({}, (span) => {
-      span.style.display = 'inline-block';
-      span.style.marginLeft = '8px';
-      span.style.color = 'var(--text-muted)';
-      intervalDisplay = span;
-      const mins = this.plugin.settings.syncInterval;
-      span.textContent = `(${mins} minute${mins !== 1 ? 's' : ''})`;
-    });
-    
-    intervalSetting.addSlider(slider => slider
-      .setLimits(1, 60, 5)
-      .setValue(this.plugin.settings.syncInterval)
-      .onChange(async (value) => {
-        this.plugin.settings.syncInterval = value;
-        await this.plugin.saveSettings();
-        if (intervalDisplay) {
-          intervalDisplay.textContent = `(${value} minute${value !== 1 ? 's' : ''})`;
-        }
-        if (this.plugin.settings.enabled) {
-          this.plugin.startSync();
-        }
-      }));
+    new Setting(containerEl)
+      .setName('Sync Duration (minutes)')
+      .setDesc('How often to sync in minutes')
+      .addText(text => text
+        .setPlaceholder('60')
+        .setValue(String(this.plugin.settings.syncDuration))
+        .onChange(async (value) => {
+          const num = parseInt(value, 10);
+          this.plugin.settings.syncDuration = isNaN(num) || num < 1 ? 60 : Math.min(num, 1440);
+          await this.plugin.saveSettings();
+          if (this.plugin.settings.autoSync) {
+            this.plugin.startSync();
+          }
+        }));
     
     new Setting(containerEl)
       .setName('YAML Field Mappings')

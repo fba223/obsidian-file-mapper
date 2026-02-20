@@ -1,9 +1,9 @@
 ---
 title: "AI-102 Exam - Free Actual Q&As, Page 1 _ ExamTopics"
 path: "/Users/zhangpeng/Documents/考试题库/AI-102 Exam - Free Actual Q&As, Page 1 _ ExamTopics.pdf"
-size: 34754905
-created: 2024-05-16T06:58:09.000Z
-modified: 2024-05-16T06:58:21.000Z
+size: 33.14 MB
+created: 2024-05-16
+modified: 2024-05-16
 type: ".pdf"
 ---
 

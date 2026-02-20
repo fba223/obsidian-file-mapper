@@ -1,9 +1,9 @@
 ---
 title: "What’s new with Databricks Serverless - out.PDF"
 path: "/Users/zhangpeng/Documents/What’s new with Databricks Serverless - out.PDF"
-size: 1239139
-created: 2026-02-03T06:06:38.197Z
-modified: 2026-02-03T06:06:38.285Z
+size: 1.18 MB
+created: 2026-02-03
+modified: 2026-02-03
 type: ".pdf"
 ---
 

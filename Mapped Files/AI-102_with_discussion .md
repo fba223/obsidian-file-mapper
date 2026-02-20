@@ -1,9 +1,9 @@
 ---
 title: "AI-102_with_discussion "
 path: "/Users/zhangpeng/Documents/考试题库/AI-102_with_discussion .pdf"
-size: 41569892
-created: 2025-06-18T02:46:49.000Z
-modified: 2025-06-18T02:46:57.000Z
+size: 39.64 MB
+created: 2025-06-18
+modified: 2025-06-18
 type: ".pdf"
 ---
 

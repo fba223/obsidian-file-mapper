@@ -1,9 +1,9 @@
 ---
 title: "Mastering Technical Sales_ The Sales Engineer's Handbook -- John Care -- 4, FR, 2022 -- Artech House Publishers -- 9781630818722 -- da15c8940d59122dea995dbbfc389b82 -- Anna’s Archive"
 path: "/Users/zhangpeng/Documents/Mastering Technical Sales_ The Sales Engineer's Handbook -- John Care -- 4, FR, 2022 -- Artech House Publishers -- 9781630818722 -- da15c8940d59122dea995dbbfc389b82 -- Anna’s Archive.pdf"
-size: 3862263
-created: 2025-06-29T00:18:46.000Z
-modified: 2025-06-29T00:18:46.000Z
+size: 3.68 MB
+created: 2025-06-29
+modified: 2025-06-29
 type: ".pdf"
 ---
 

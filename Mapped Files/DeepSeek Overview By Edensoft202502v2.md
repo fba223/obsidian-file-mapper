@@ -1,9 +1,9 @@
 ---
 title: "DeepSeek Overview By Edensoft202502v2"
 path: "/Users/zhangpeng/Documents/DeepSeek Overview By Edensoft202502v2.pdf"
-size: 2633506
-created: 2025-02-13T01:06:10.000Z
-modified: 2025-02-13T01:06:11.000Z
+size: 2.51 MB
+created: 2025-02-13
+modified: 2025-02-13
 type: ".pdf"
 ---
 

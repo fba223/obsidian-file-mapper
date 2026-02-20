@@ -1,6 +1,7 @@
 {
   "sourcePaths": [
-    "/Users/zhangpeng/Documents"
+    "/Users/zhangpeng/Documents",
+    "/Users/zhangpeng/Downloads"
   ],
   "targetPath": "Mapped Files",
   "fileExtensions": ".pdf,.docx,.doc,.mp4,.epub",
@@ -12,6 +13,9 @@
     "modifiedDate": "modified",
     "fileType": "type"
   },
-  "syncInterval": 31,
-  "enabled": true
+  "syncInterval": 16,
+  "enabled": true,
+  "dateFormat": "YYYY-MM-DD",
+  "dateIncludeTime": false,
+  "sizeUnit": "MB"
 }

@@ -1,9 +1,9 @@
 ---
 title: "Journey to Agent Store & Build Agent in Copilot Studio"
 path: "/Users/zhangpeng/Documents/解决方案库/Journey to Agent Store & Build Agent in Copilot Studio.pdf"
-size: 8101316
-created: 2025-09-23T02:14:46.000Z
-modified: 2025-09-23T02:15:00.000Z
+size: 7.73 MB
+created: 2025-09-23
+modified: 2025-09-23
 type: ".pdf"
 ---
 
