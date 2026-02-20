@@ -1,4 +1,21 @@
+# Dependencies
 node_modules/
+
+# Build
 *.js.map
+
+# OS
 .DS_Store
-"Mapped Files/"
+Thumbs.db
+
+# Obsidian vault files
+.obsidian/
+Mapped Files/
+*.base
+
+# Test files (local development)
+tests/
+test-*.md
+
+# Package lock (optional, use yarn in open source)
+package-lock.json

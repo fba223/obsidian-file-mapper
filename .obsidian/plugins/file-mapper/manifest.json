@@ -1,8 +1,0 @@
-{
-  "id": "file-mapper",
-  "name": "File Mapper",
-  "version": "1.0.0",
-  "description": "Map local files to Obsidian with custom YAML frontmatter",
-  "author": "",
-  "isDesktopOnly": false
-}
