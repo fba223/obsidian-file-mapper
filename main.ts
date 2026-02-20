@@ -162,12 +162,20 @@ export default class FileMapperPlugin extends Plugin {
     const added = scannedFiles.filter(f => !existingSourcePaths.has(f.sourcePath));
     const deleted = existingFiles.filter(f => !scannedSourcePaths.has(f.sourcePath));
     
+    const findSourceBasePath = (filePath: string, sourcePaths: string[]): string => {
+      for (const sp of sourcePaths) {
+        if (filePath.startsWith(sp)) return sp;
+      }
+      return sourcePaths[0] || '';
+    };
+    
     for (const file of deleted) {
       await this.deleteMappedFile(targetPath, file.path);
     }
     
     for (const file of added) {
-      const uniqueName = this.getUniqueFileName(file, sourcePaths[0]);
+      const basePath = findSourceBasePath(file.sourcePath, sourcePaths);
+      const uniqueName = this.getUniqueFileName(file, basePath);
       const fileWithUniqueName = { ...file, name: uniqueName };
       await this.createMappedFile(targetPath, fileWithUniqueName, fieldMappings);
     }
@@ -181,7 +189,8 @@ export default class FileMapperPlugin extends Plugin {
     for (const file of updated) {
       const existing = existingFiles.find(e => e.sourcePath === file.sourcePath);
       if (existing) {
-        const uniqueName = this.getUniqueFileName(file, sourcePaths[0]);
+        const basePath = findSourceBasePath(file.sourcePath, sourcePaths);
+        const uniqueName = this.getUniqueFileName(file, basePath);
         const fileWithUniqueName = { ...file, name: uniqueName };
         await this.updateMappedFile(targetPath, existing.path, fileWithUniqueName, fieldMappings);
       }
@@ -221,8 +230,8 @@ export default class FileMapperPlugin extends Plugin {
             files.push({
               name: child.basename,
               path: child.path,
-              sourcePath: frontmatter.sourcePath || '',
-              sourceMtime: frontmatter.sourceMtime || 0,
+            sourcePath: frontmatter['source_path'] || '',
+            sourceMtime: parseInt(frontmatter['source_mtime']) || 0,
               size: 0,
               created: new Date(child.stat.ctime),
               modified: new Date(child.stat.mtime),

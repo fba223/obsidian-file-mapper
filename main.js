@@ -179,11 +179,19 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       const scannedSourcePaths = new Set(scannedFiles.map((f) => f.sourcePath));
       const added = scannedFiles.filter((f) => !existingSourcePaths.has(f.sourcePath));
       const deleted = existingFiles.filter((f) => !scannedSourcePaths.has(f.sourcePath));
+      const findSourceBasePath = (filePath, sourcePaths2) => {
+        for (const sp of sourcePaths2) {
+          if (filePath.startsWith(sp))
+            return sp;
+        }
+        return sourcePaths2[0] || "";
+      };
       for (const file of deleted) {
         yield this.deleteMappedFile(targetPath, file.path);
       }
       for (const file of added) {
-        const uniqueName = this.getUniqueFileName(file, sourcePaths[0]);
+        const basePath = findSourceBasePath(file.sourcePath, sourcePaths);
+        const uniqueName = this.getUniqueFileName(file, basePath);
         const fileWithUniqueName = __spreadProps(__spreadValues({}, file), { name: uniqueName });
         yield this.createMappedFile(targetPath, fileWithUniqueName, fieldMappings);
       }
@@ -196,7 +204,8 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       for (const file of updated) {
         const existing = existingFiles.find((e) => e.sourcePath === file.sourcePath);
         if (existing) {
-          const uniqueName = this.getUniqueFileName(file, sourcePaths[0]);
+          const basePath = findSourceBasePath(file.sourcePath, sourcePaths);
+          const uniqueName = this.getUniqueFileName(file, basePath);
           const fileWithUniqueName = __spreadProps(__spreadValues({}, file), { name: uniqueName });
           yield this.updateMappedFile(targetPath, existing.path, fileWithUniqueName, fieldMappings);
         }
@@ -234,8 +243,8 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
               files.push({
                 name: child.basename,
                 path: child.path,
-                sourcePath: frontmatter.sourcePath || "",
-                sourceMtime: frontmatter.sourceMtime || 0,
+                sourcePath: frontmatter["source_path"] || "",
+                sourceMtime: parseInt(frontmatter["source_mtime"]) || 0,
                 size: 0,
                 created: new Date(child.stat.ctime),
                 modified: new Date(child.stat.mtime),
