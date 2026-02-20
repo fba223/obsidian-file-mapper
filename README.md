@@ -102,6 +102,13 @@ Each rule can add multiple properties:
 - `type` (string/number/boolean/list/json)
 - `value` (text input, defaults vary by type)
 
+Value examples:
+- `string`: `ai`
+- `number`: `3`
+- `boolean`: `true` / `false`
+- `list`: `ai, paper, 2024` (comma-separated)
+- `json`: `{"source":"internal","reviewed":false}`
+
 Example path match:
 ```
 /Users/username/Research/AI
