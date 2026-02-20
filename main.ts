@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFolder, TFile, Vault } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFolder, TFile, Vault, parseYaml, stringifyYaml } from 'obsidian';
 
 interface FileMapperSettings {
   sourcePaths: string[];
@@ -11,12 +11,25 @@ interface FileMapperSettings {
     createdDate: string;
     modifiedDate: string;
     fileType: string;
+    cover: string;
   };
   autoSync: boolean;
   syncDuration: number;
   dateFormat: string;
   dateIncludeTime: boolean;
   sizeUnit: string;
+  enableCover: boolean;
+  coverPath: string;
+  coverSize: number;
+  pathRules: PathRule[];
+}
+
+type PathRuleMatchType = 'prefix' | 'regex';
+
+interface PathRule {
+  matchType: PathRuleMatchType;
+  pattern: string;
+  frontmatter: string;
 }
 
 interface SourceFile {
@@ -28,6 +41,7 @@ interface SourceFile {
   created: Date;
   modified: Date;
   extension: string;
+  coverPath?: string;
 }
 
 const DEFAULT_SETTINGS: FileMapperSettings = {
@@ -40,13 +54,18 @@ const DEFAULT_SETTINGS: FileMapperSettings = {
     fileSize: 'size',
     createdDate: 'created',
     modifiedDate: 'modified',
-    fileType: 'type'
+    fileType: 'type',
+    cover: 'cover'
   },
   syncDuration: 60,
   autoSync: false,
   dateFormat: 'YYYY-MM-DD',
   dateIncludeTime: false,
-  sizeUnit: 'KB'
+  sizeUnit: 'KB',
+  enableCover: false,
+  coverPath: 'cover-images',
+  coverSize: 600,
+  pathRules: []
 };
 
 declare global {
@@ -187,6 +206,8 @@ export default class FileMapperPlugin extends Plugin {
       const basePath = findSourceBasePath(file.sourcePath, sourcePaths);
       const uniqueName = this.getUniqueFileName(file, basePath);
       const fileWithUniqueName = { ...file, name: uniqueName };
+      const coverPath = await this.generateCover(fileWithUniqueName);
+      fileWithUniqueName.coverPath = coverPath || undefined;
       await this.createMappedFile(targetPath, fileWithUniqueName, fieldMappings);
     }
     
@@ -202,6 +223,8 @@ export default class FileMapperPlugin extends Plugin {
         const basePath = findSourceBasePath(file.sourcePath, sourcePaths);
         const uniqueName = this.getUniqueFileName(file, basePath);
         const fileWithUniqueName = { ...file, name: uniqueName };
+        const coverPath = await this.generateCover(fileWithUniqueName);
+        fileWithUniqueName.coverPath = coverPath || undefined;
         await this.updateMappedFile(targetPath, existing.path, fileWithUniqueName, fieldMappings);
       }
     }
@@ -217,6 +240,101 @@ export default class FileMapperPlugin extends Plugin {
 
   private encodeFileUrl(filePath: string): string {
     return 'file://' + encodeURIComponent(filePath);
+  }
+
+  private extractFrontmatter(content: string): { frontmatter: Record<string, any>; body: string } {
+    const match = content.match(/^---\n([\s\S]*?)\n---\s*\n?/);
+    if (!match) {
+      return { frontmatter: {}, body: content };
+    }
+
+    let parsed: Record<string, any> = {};
+    try {
+      const data = parseYaml(match[1]);
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        parsed = data as Record<string, any>;
+      }
+    } catch (e) {
+      parsed = this.parseFrontmatterFallback(match[1]);
+    }
+
+    const body = content.slice(match[0].length);
+    return { frontmatter: parsed, body };
+  }
+
+  private parseFrontmatterFallback(block: string): Record<string, any> {
+    const result: Record<string, any> = {};
+    const lines = block.split('\n');
+    for (const line of lines) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx > 0) {
+        const key = line.substring(0, colonIdx).trim();
+        let value = line.substring(colonIdx + 1).trim();
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  private normalizePathForMatch(input: string): string {
+    return input.replace(/[\\/]+$/, '');
+  }
+
+  private getMostSpecificPathRule(filePath: string): PathRule | null {
+    let bestRule: PathRule | null = null;
+    let bestScore = -1;
+
+    for (const rule of this.settings.pathRules) {
+      const pattern = rule.pattern?.trim();
+      if (!pattern) continue;
+
+      if (rule.matchType === 'prefix') {
+        const normalizedPattern = this.normalizePathForMatch(pattern);
+        const normalizedPath = this.normalizePathForMatch(filePath);
+        const isBoundary = normalizedPath === normalizedPattern ||
+          normalizedPath.startsWith(normalizedPattern + '/') ||
+          normalizedPath.startsWith(normalizedPattern + '\\');
+        if (isBoundary) {
+          const score = normalizedPattern.length;
+          if (score > bestScore) {
+            bestScore = score;
+            bestRule = rule;
+          }
+        }
+      } else if (rule.matchType === 'regex') {
+        try {
+          const regex = new RegExp(pattern);
+          const match = filePath.match(regex);
+          if (match) {
+            const score = match[0]?.length ?? 0;
+            if (score > bestScore) {
+              bestScore = score;
+              bestRule = rule;
+            }
+          }
+        } catch (e) {
+          console.warn(`Invalid regex pattern in path rule: ${pattern}`, e);
+        }
+      }
+    }
+
+    return bestRule;
+  }
+
+  private parseRuleFrontmatter(rule: PathRule | null): Record<string, any> {
+    if (!rule || !rule.frontmatter?.trim()) return {};
+    try {
+      const data = parseYaml(rule.frontmatter);
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        return data as Record<string, any>;
+      }
+    } catch (e) {
+      console.warn('Failed to parse rule frontmatter YAML:', e);
+    }
+    return {};
   }
 
   private getUniqueFileName(file: SourceFile, sourceBasePath: string): string {
@@ -235,7 +353,7 @@ export default class FileMapperPlugin extends Plugin {
         if (child instanceof TFile && child.extension === 'md') {
           try {
             const content = await this.app.vault.read(child);
-            const frontmatter = this.parseFrontmatter(content);
+            const { frontmatter } = this.extractFrontmatter(content);
             
             files.push({
               name: child.basename,
@@ -255,26 +373,6 @@ export default class FileMapperPlugin extends Plugin {
     };
     await processFolder(folder);
     return files;
-  }
-
-  private parseFrontmatter(content: string): Record<string, any> {
-    const result: Record<string, any> = {};
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
-    if (!match) return result;
-    
-    const lines = match[1].split('\n');
-    for (const line of lines) {
-      const colonIdx = line.indexOf(':');
-      if (colonIdx > 0) {
-        const key = line.substring(0, colonIdx).trim();
-        let value = line.substring(colonIdx + 1).trim();
-        if (value.startsWith('"') && value.endsWith('"')) {
-          value = value.slice(1, -1);
-        }
-        result[key] = value;
-      }
-    }
-    return result;
   }
 
   async scanSourceFiles(sourcePaths: string[], extensions: string[]): Promise<SourceFile[]> {
@@ -353,14 +451,16 @@ export default class FileMapperPlugin extends Plugin {
     const folder = await this.ensureTargetFolderByPath(targetPath);
     if (!folder) return;
     
-    const content = this.generateFileContent(file, fieldMappings);
     const filePath = `${targetPath}/${file.name}.md`;
     
     try {
       const existing = this.app.vault.getAbstractFileByPath(filePath);
       if (existing) {
+        const existingContent = await this.app.vault.read(existing as TFile);
+        const content = this.generateFileContent(file, fieldMappings, existingContent);
         await this.app.vault.modify(existing as TFile, content);
       } else {
+        const content = this.generateFileContent(file, fieldMappings);
         await this.app.vault.create(filePath, content);
       }
     } catch (e) {
@@ -372,7 +472,8 @@ export default class FileMapperPlugin extends Plugin {
     try {
       const existing = this.app.vault.getAbstractFileByPath(existingFilePath);
       if (existing) {
-        const content = this.generateFileContent(file, fieldMappings);
+        const existingContent = await this.app.vault.read(existing as TFile);
+        const content = this.generateFileContent(file, fieldMappings, existingContent);
         await this.app.vault.modify(existing as TFile, content);
       }
     } catch (e) {
@@ -391,22 +492,110 @@ export default class FileMapperPlugin extends Plugin {
     }
   }
 
-  generateFileContent(file: SourceFile, fieldMappings: FileMapperSettings['fieldMappings']): string {
-    const { dateFormat, dateIncludeTime, sizeUnit } = this.settings;
+  generateFileContent(file: SourceFile, fieldMappings: FileMapperSettings['fieldMappings'], existingContent?: string): string {
+    const { dateFormat, dateIncludeTime, sizeUnit, enableCover } = this.settings;
+
+    const existing = existingContent ? this.extractFrontmatter(existingContent) : { frontmatter: {}, body: '' };
+    const frontmatter: Record<string, any> = { ...existing.frontmatter };
+    const body = existingContent ? existing.body : `[${file.name}](${this.encodeFileUrl(file.sourcePath)})`;
+
+    const pluginFields = new Set<string>([
+      fieldMappings.fileName,
+      fieldMappings.filePath,
+      fieldMappings.fileSize,
+      fieldMappings.createdDate,
+      fieldMappings.modifiedDate,
+      fieldMappings.fileType,
+      fieldMappings.cover,
+      'source_path',
+      'source_mtime'
+    ]);
+
+    frontmatter[fieldMappings.fileName] = file.name;
+    frontmatter[fieldMappings.filePath] = file.sourcePath;
+    frontmatter['source_path'] = file.sourcePath;
+    frontmatter['source_mtime'] = file.sourceMtime;
+    frontmatter[fieldMappings.fileSize] = `${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`;
+    frontmatter[fieldMappings.createdDate] = this.formatDate(file.created, dateFormat, dateIncludeTime);
+    frontmatter[fieldMappings.modifiedDate] = this.formatDate(file.modified, dateFormat, dateIncludeTime);
+    frontmatter[fieldMappings.fileType] = file.extension;
+    if (enableCover && file.coverPath) {
+      frontmatter[fieldMappings.cover] = file.coverPath;
+    } else {
+      delete frontmatter[fieldMappings.cover];
+    }
+
+    const rule = this.getMostSpecificPathRule(file.sourcePath);
+    const ruleFrontmatter = this.parseRuleFrontmatter(rule);
+    for (const [key, value] of Object.entries(ruleFrontmatter)) {
+      if (pluginFields.has(key)) continue;
+      if (Object.prototype.hasOwnProperty.call(frontmatter, key)) continue;
+      frontmatter[key] = value;
+    }
+
+    const yamlBody = stringifyYaml(frontmatter).trimEnd();
+    const yamlBlock = yamlBody.length > 0 ? yamlBody : '';
+    return ['---', yamlBlock, '---', '', body].join('\n');
+  }
+
+  async generateCover(file: SourceFile): Promise<string | null> {
+    if (!this.settings.enableCover) {
+      return null;
+    }
+
+    const { coverPath, coverSize } = this.settings;
+    const ext = file.extension.toLowerCase();
+    const supportedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.mp4', '.mov', '.avi', '.mp3', '.wav', '.docx', '.pptx', '.xlsx'];
     
-    const lines = ['---'];
-    lines.push(`${fieldMappings.fileName}: ${this.escapeYaml(file.name)}`);
-    lines.push(`${fieldMappings.filePath}: ${this.escapeYaml(file.sourcePath)}`);
-    lines.push(`source_path: ${this.escapeYaml(file.sourcePath)}`);
-    lines.push(`source_mtime: ${file.sourceMtime}`);
-    lines.push(`${fieldMappings.fileSize}: ${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`);
-    lines.push(`${fieldMappings.createdDate}: ${this.formatDate(file.created, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.modifiedDate}: ${this.formatDate(file.modified, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.fileType}: ${this.escapeYaml(file.extension)}`);
-    lines.push('---');
-    lines.push('');
-    lines.push(`[${file.name}](${this.encodeFileUrl(file.sourcePath)})`);
-    return lines.join('\n');
+    if (!supportedExtensions.includes(ext)) {
+      console.log(`Cover: unsupported file type ${ext}`);
+      return null;
+    }
+
+    try {
+      const vault = this.app.vault;
+      const coverFolder = vault.getAbstractFileByPath(coverPath);
+      if (!coverFolder) {
+        await vault.createFolder(coverPath);
+      }
+
+      const cacheKey = this.getCoverCacheKey(file.sourcePath, file.sourceMtime);
+      const coverFileName = `${cacheKey}.png`;
+      const coverFullPath = `${coverPath}/${coverFileName}`;
+
+      const existingCover = vault.getAbstractFileByPath(coverFullPath);
+      if (existingCover) {
+        return coverFullPath;
+      }
+
+      const fs = require('fs');
+      const { execSync } = require('child_process');
+      
+      try {
+        execSync(`qlmanage -t -s ${coverSize} -o /tmp "${file.sourcePath}"`, { stdio: 'ignore' });
+        const generatedPng = `${file.sourcePath}.png`;
+        
+        if (fs.existsSync(generatedPng)) {
+          const coverData = fs.readFileSync(generatedPng);
+          const base64Data = coverData.toString('base64');
+          await vault.create(coverFullPath, `data:image/png;base64,${base64Data}`);
+          fs.unlinkSync(generatedPng);
+          return coverFullPath;
+        }
+      } catch (e) {
+        console.log('qlmanage failed, skipping cover generation');
+      }
+
+      return null;
+    } catch (e) {
+      console.error('Error generating cover:', e);
+      return null;
+    }
+  }
+
+  private getCoverCacheKey(filePath: string, mtime: number): string {
+    const crypto = require('crypto');
+    return crypto.createHash('md5').update(filePath + mtime).digest('hex').substring(0, 8);
   }
 }
 
@@ -550,6 +739,23 @@ class FileMapperSettingTab extends PluginSettingTab {
           this.plugin.settings.fieldMappings.fileType = value;
           await this.plugin.saveSettings();
         }));
+
+    new Setting(containerEl)
+      .setName('Path Rules')
+      .setDesc('Add frontmatter based on source path. Most specific rule wins. Fields only fill when missing.')
+      .setHeading();
+
+    const rulesContainer = containerEl.createDiv('file-mapper-path-rules');
+    this.renderPathRules(rulesContainer);
+
+    new Setting(containerEl)
+      .addButton(button => button
+        .setButtonText('Add Path Rule')
+        .onClick(async () => {
+          this.plugin.settings.pathRules.push({ matchType: 'prefix', pattern: '', frontmatter: '' });
+          await this.plugin.saveSettings();
+          this.display();
+        }));
     
     new Setting(containerEl)
       .setName('Date & Time Format')
@@ -591,10 +797,97 @@ class FileMapperSettingTab extends PluginSettingTab {
         }));
     
     new Setting(containerEl)
+      .setName('Cover Image')
+      .setHeading();
+    
+    new Setting(containerEl)
+      .setName('Enable Cover')
+      .setDesc('Generate cover images for mapped files')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.enableCover)
+        .onChange(async (value) => {
+          this.plugin.settings.enableCover = value;
+          await this.plugin.saveSettings();
+        }));
+    
+    new Setting(containerEl)
+      .setName('Cover Path')
+      .setDesc('Folder to store cover images')
+      .addText(text => text
+        .setPlaceholder('cover-images')
+        .setValue(this.plugin.settings.coverPath)
+        .onChange(async (value) => {
+          this.plugin.settings.coverPath = value;
+          await this.plugin.saveSettings();
+        }));
+    
+    new Setting(containerEl)
+      .setName('Cover Size')
+      .setDesc('Thumbnail size in pixels')
+      .addText(text => text
+        .setPlaceholder('600')
+        .setValue(String(this.plugin.settings.coverSize))
+        .onChange(async (value) => {
+          this.plugin.settings.coverSize = parseInt(value) || 600;
+          await this.plugin.saveSettings();
+        }));
+    
+    new Setting(containerEl)
       .addButton(button => button
         .setButtonText('Sync Now')
         .onClick(async () => {
           await this.plugin.syncFiles();
         }));
+  }
+
+  private renderPathRules(containerEl: HTMLElement) {
+    containerEl.empty();
+
+    this.plugin.settings.pathRules.forEach((rule, index) => {
+      new Setting(containerEl)
+        .setName(`Rule ${index + 1}`)
+        .setDesc('Most specific rule wins (longest match).')
+        .addExtraButton(button => button
+          .setIcon('trash')
+          .setTooltip('Delete rule')
+          .onClick(async () => {
+            this.plugin.settings.pathRules.splice(index, 1);
+            await this.plugin.saveSettings();
+            this.display();
+          }));
+
+      new Setting(containerEl)
+        .setName('Match Type')
+        .addDropdown(dropdown => dropdown
+          .addOption('prefix', 'Prefix')
+          .addOption('regex', 'Regex')
+          .setValue(rule.matchType)
+          .onChange(async (value) => {
+            rule.matchType = value as PathRuleMatchType;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Pattern')
+        .setDesc('Prefix path or regex pattern.')
+        .addText(text => text
+          .setPlaceholder('/path/to/folder')
+          .setValue(rule.pattern)
+          .onChange(async (value) => {
+            rule.pattern = value;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Frontmatter (YAML)')
+        .setDesc('YAML snippet without --- delimiters. Fields only fill when missing.')
+        .addTextArea(text => text
+          .setPlaceholder('topic: ai\ncategory: papers')
+          .setValue(rule.frontmatter)
+          .onChange(async (value) => {
+            rule.frontmatter = value;
+            await this.plugin.saveSettings();
+          }));
+    });
   }
 }

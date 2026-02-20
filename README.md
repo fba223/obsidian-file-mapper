@@ -17,6 +17,8 @@ File Mapper is an Obsidian plugin that automatically maps local files from exter
 - **Auto-Sync** - Automatically detect and sync new, modified, and deleted files
 - **Flexible Date Formatting** - Customize date format (YYYY-MM-DD, DD/MM/YYYY, etc.) with optional time
 - **Size Unit Selection** - Display file sizes in Bytes, KB, MB, or GB
+- **Path-Based Frontmatter Rules** - Add extra metadata (e.g., `topic: ai`) based on source path
+- **Cover Images** - Generate thumbnail previews for PDFs, images, videos, and Office documents (macOS only)
 
 ### What It Maps
 
@@ -28,6 +30,7 @@ For each file, the plugin creates a corresponding `.md` file with:
 - **Created** - Creation date with customizable format
 - **Modified** - Last modified date with customizable format
 - **Type** - File extension/type
+- **Cover** - Thumbnail image path (optional, macOS only)
 - **Clickable Link** - Direct link to open the original file
 
 ## Installation
@@ -92,6 +95,25 @@ Customize the YAML frontmatter field names:
 | `modified` | Last modified date |
 | `type` | File extension |
 
+### Path Rules
+
+Add extra frontmatter based on the source path. The most specific rule wins (longest match). Rule fields only fill when the field is missing.
+
+Example rule:
+```yaml
+topic: ai
+category: papers
+```
+
+Example path match:
+```
+/Users/username/Research/AI
+```
+
+### Frontmatter Merge Behavior
+
+On sync, the plugin preserves existing frontmatter and note body. It only updates plugin-managed fields (file name/path/size/dates/type/cover). Path rules fill missing fields without overwriting your manual edits.
+
 ### Date & Time Format
 
 - **Date Format**: Customize the date format using `YYYY`, `MM`, `DD`
@@ -108,6 +130,18 @@ Choose how file sizes are displayed:
 - **KB** - `1.00 KB`
 - **MB** - `0.98 MB`
 - **GB** - `0.00 GB`
+
+### Cover Image (macOS Only)
+
+Generate thumbnail previews for your mapped files:
+
+- **Enable Cover** - Toggle to generate cover images
+- **Cover Path** - Folder to store cover images (default: `cover-images`)
+- **Cover Size** - Thumbnail size in pixels (default: 600)
+
+Supported file types: PDF, PNG, JPG, GIF, BMP, TIFF, MP4, MOV, AVI, MP3, WAV, DOCX, PPTX, XLSX
+
+The cover images are stored as base64 data URIs, making them work directly in Obsidian without additional configuration.
 
 ### Manual Sync
 
@@ -155,6 +189,7 @@ size: 2.50 MB
 created: 2024-02-20
 modified: 2024-02-21
 type: ".pdf"
+topic: ai
 ---
 [report](file:///Users/username/Documents/report.pdf)
 ```
@@ -164,6 +199,7 @@ type: ".pdf"
 - **Desktop Only**: File system access requires desktop Obsidian
 - **Read-only Links**: Opens files in their default application
 - **No Content**: Mapped files contain only metadata and links, not file content
+- **Cover Images**: Only available on macOS (uses Quick Look)
 
 ## Support
 

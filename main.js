@@ -74,13 +74,18 @@ var DEFAULT_SETTINGS = {
     fileSize: "size",
     createdDate: "created",
     modifiedDate: "modified",
-    fileType: "type"
+    fileType: "type",
+    cover: "cover"
   },
   syncDuration: 60,
   autoSync: false,
   dateFormat: "YYYY-MM-DD",
   dateIncludeTime: false,
-  sizeUnit: "KB"
+  sizeUnit: "KB",
+  enableCover: false,
+  coverPath: "cover-images",
+  coverSize: 600,
+  pathRules: []
 };
 var FileMapperPlugin = class extends import_obsidian.Plugin {
   constructor() {
@@ -200,6 +205,8 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
         const basePath = findSourceBasePath(file.sourcePath, sourcePaths);
         const uniqueName = this.getUniqueFileName(file, basePath);
         const fileWithUniqueName = __spreadProps(__spreadValues({}, file), { name: uniqueName });
+        const coverPath = yield this.generateCover(fileWithUniqueName);
+        fileWithUniqueName.coverPath = coverPath || void 0;
         yield this.createMappedFile(targetPath, fileWithUniqueName, fieldMappings);
       }
       const updated = scannedFiles.filter((f) => {
@@ -214,6 +221,8 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
           const basePath = findSourceBasePath(file.sourcePath, sourcePaths);
           const uniqueName = this.getUniqueFileName(file, basePath);
           const fileWithUniqueName = __spreadProps(__spreadValues({}, file), { name: uniqueName });
+          const coverPath = yield this.generateCover(fileWithUniqueName);
+          fileWithUniqueName.coverPath = coverPath || void 0;
           yield this.updateMappedFile(targetPath, existing.path, fileWithUniqueName, fieldMappings);
         }
       }
@@ -229,6 +238,93 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
   }
   encodeFileUrl(filePath) {
     return "file://" + encodeURIComponent(filePath);
+  }
+  extractFrontmatter(content) {
+    const match = content.match(/^---\n([\s\S]*?)\n---\s*\n?/);
+    if (!match) {
+      return { frontmatter: {}, body: content };
+    }
+    let parsed = {};
+    try {
+      const data = (0, import_obsidian.parseYaml)(match[1]);
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        parsed = data;
+      }
+    } catch (e) {
+      parsed = this.parseFrontmatterFallback(match[1]);
+    }
+    const body = content.slice(match[0].length);
+    return { frontmatter: parsed, body };
+  }
+  parseFrontmatterFallback(block) {
+    const result = {};
+    const lines = block.split("\n");
+    for (const line of lines) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx > 0) {
+        const key = line.substring(0, colonIdx).trim();
+        let value = line.substring(colonIdx + 1).trim();
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+  normalizePathForMatch(input) {
+    return input.replace(/[\\/]+$/, "");
+  }
+  getMostSpecificPathRule(filePath) {
+    var _a, _b, _c;
+    let bestRule = null;
+    let bestScore = -1;
+    for (const rule of this.settings.pathRules) {
+      const pattern = (_a = rule.pattern) == null ? void 0 : _a.trim();
+      if (!pattern)
+        continue;
+      if (rule.matchType === "prefix") {
+        const normalizedPattern = this.normalizePathForMatch(pattern);
+        const normalizedPath = this.normalizePathForMatch(filePath);
+        const isBoundary = normalizedPath === normalizedPattern || normalizedPath.startsWith(normalizedPattern + "/") || normalizedPath.startsWith(normalizedPattern + "\\");
+        if (isBoundary) {
+          const score = normalizedPattern.length;
+          if (score > bestScore) {
+            bestScore = score;
+            bestRule = rule;
+          }
+        }
+      } else if (rule.matchType === "regex") {
+        try {
+          const regex = new RegExp(pattern);
+          const match = filePath.match(regex);
+          if (match) {
+            const score = (_c = (_b = match[0]) == null ? void 0 : _b.length) != null ? _c : 0;
+            if (score > bestScore) {
+              bestScore = score;
+              bestRule = rule;
+            }
+          }
+        } catch (e) {
+          console.warn(`Invalid regex pattern in path rule: ${pattern}`, e);
+        }
+      }
+    }
+    return bestRule;
+  }
+  parseRuleFrontmatter(rule) {
+    var _a;
+    if (!rule || !((_a = rule.frontmatter) == null ? void 0 : _a.trim()))
+      return {};
+    try {
+      const data = (0, import_obsidian.parseYaml)(rule.frontmatter);
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        return data;
+      }
+    } catch (e) {
+      console.warn("Failed to parse rule frontmatter YAML:", e);
+    }
+    return {};
   }
   getUniqueFileName(file, sourceBasePath) {
     const relPath = file.sourcePath.substring(sourceBasePath.length);
@@ -246,7 +342,7 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
           if (child instanceof import_obsidian.TFile && child.extension === "md") {
             try {
               const content = yield this.app.vault.read(child);
-              const frontmatter = this.parseFrontmatter(content);
+              const { frontmatter } = this.extractFrontmatter(content);
               files.push({
                 name: child.basename,
                 path: child.path,
@@ -266,25 +362,6 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       yield processFolder(folder);
       return files;
     });
-  }
-  parseFrontmatter(content) {
-    const result = {};
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
-    if (!match)
-      return result;
-    const lines = match[1].split("\n");
-    for (const line of lines) {
-      const colonIdx = line.indexOf(":");
-      if (colonIdx > 0) {
-        const key = line.substring(0, colonIdx).trim();
-        let value = line.substring(colonIdx + 1).trim();
-        if (value.startsWith('"') && value.endsWith('"')) {
-          value = value.slice(1, -1);
-        }
-        result[key] = value;
-      }
-    }
-    return result;
   }
   scanSourceFiles(sourcePaths, extensions) {
     return __async(this, null, function* () {
@@ -361,13 +438,15 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       const folder = yield this.ensureTargetFolderByPath(targetPath);
       if (!folder)
         return;
-      const content = this.generateFileContent(file, fieldMappings);
       const filePath = `${targetPath}/${file.name}.md`;
       try {
         const existing = this.app.vault.getAbstractFileByPath(filePath);
         if (existing) {
+          const existingContent = yield this.app.vault.read(existing);
+          const content = this.generateFileContent(file, fieldMappings, existingContent);
           yield this.app.vault.modify(existing, content);
         } else {
+          const content = this.generateFileContent(file, fieldMappings);
           yield this.app.vault.create(filePath, content);
         }
       } catch (e) {
@@ -380,7 +459,8 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       try {
         const existing = this.app.vault.getAbstractFileByPath(existingFilePath);
         if (existing) {
-          const content = this.generateFileContent(file, fieldMappings);
+          const existingContent = yield this.app.vault.read(existing);
+          const content = this.generateFileContent(file, fieldMappings, existingContent);
           yield this.app.vault.modify(existing, content);
         }
       } catch (e) {
@@ -400,21 +480,98 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       }
     });
   }
-  generateFileContent(file, fieldMappings) {
-    const { dateFormat, dateIncludeTime, sizeUnit } = this.settings;
-    const lines = ["---"];
-    lines.push(`${fieldMappings.fileName}: ${this.escapeYaml(file.name)}`);
-    lines.push(`${fieldMappings.filePath}: ${this.escapeYaml(file.sourcePath)}`);
-    lines.push(`source_path: ${this.escapeYaml(file.sourcePath)}`);
-    lines.push(`source_mtime: ${file.sourceMtime}`);
-    lines.push(`${fieldMappings.fileSize}: ${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`);
-    lines.push(`${fieldMappings.createdDate}: ${this.formatDate(file.created, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.modifiedDate}: ${this.formatDate(file.modified, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.fileType}: ${this.escapeYaml(file.extension)}`);
-    lines.push("---");
-    lines.push("");
-    lines.push(`[${file.name}](${this.encodeFileUrl(file.sourcePath)})`);
-    return lines.join("\n");
+  generateFileContent(file, fieldMappings, existingContent) {
+    const { dateFormat, dateIncludeTime, sizeUnit, enableCover } = this.settings;
+    const existing = existingContent ? this.extractFrontmatter(existingContent) : { frontmatter: {}, body: "" };
+    const frontmatter = __spreadValues({}, existing.frontmatter);
+    const body = existingContent ? existing.body : `[${file.name}](${this.encodeFileUrl(file.sourcePath)})`;
+    const pluginFields = /* @__PURE__ */ new Set([
+      fieldMappings.fileName,
+      fieldMappings.filePath,
+      fieldMappings.fileSize,
+      fieldMappings.createdDate,
+      fieldMappings.modifiedDate,
+      fieldMappings.fileType,
+      fieldMappings.cover,
+      "source_path",
+      "source_mtime"
+    ]);
+    frontmatter[fieldMappings.fileName] = file.name;
+    frontmatter[fieldMappings.filePath] = file.sourcePath;
+    frontmatter["source_path"] = file.sourcePath;
+    frontmatter["source_mtime"] = file.sourceMtime;
+    frontmatter[fieldMappings.fileSize] = `${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`;
+    frontmatter[fieldMappings.createdDate] = this.formatDate(file.created, dateFormat, dateIncludeTime);
+    frontmatter[fieldMappings.modifiedDate] = this.formatDate(file.modified, dateFormat, dateIncludeTime);
+    frontmatter[fieldMappings.fileType] = file.extension;
+    if (enableCover && file.coverPath) {
+      frontmatter[fieldMappings.cover] = file.coverPath;
+    } else {
+      delete frontmatter[fieldMappings.cover];
+    }
+    const rule = this.getMostSpecificPathRule(file.sourcePath);
+    const ruleFrontmatter = this.parseRuleFrontmatter(rule);
+    for (const [key, value] of Object.entries(ruleFrontmatter)) {
+      if (pluginFields.has(key))
+        continue;
+      if (Object.prototype.hasOwnProperty.call(frontmatter, key))
+        continue;
+      frontmatter[key] = value;
+    }
+    const yamlBody = (0, import_obsidian.stringifyYaml)(frontmatter).trimEnd();
+    const yamlBlock = yamlBody.length > 0 ? yamlBody : "";
+    return ["---", yamlBlock, "---", "", body].join("\n");
+  }
+  generateCover(file) {
+    return __async(this, null, function* () {
+      if (!this.settings.enableCover) {
+        return null;
+      }
+      const { coverPath, coverSize } = this.settings;
+      const ext = file.extension.toLowerCase();
+      const supportedExtensions = [".pdf", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".mp4", ".mov", ".avi", ".mp3", ".wav", ".docx", ".pptx", ".xlsx"];
+      if (!supportedExtensions.includes(ext)) {
+        console.log(`Cover: unsupported file type ${ext}`);
+        return null;
+      }
+      try {
+        const vault = this.app.vault;
+        const coverFolder = vault.getAbstractFileByPath(coverPath);
+        if (!coverFolder) {
+          yield vault.createFolder(coverPath);
+        }
+        const cacheKey = this.getCoverCacheKey(file.sourcePath, file.sourceMtime);
+        const coverFileName = `${cacheKey}.png`;
+        const coverFullPath = `${coverPath}/${coverFileName}`;
+        const existingCover = vault.getAbstractFileByPath(coverFullPath);
+        if (existingCover) {
+          return coverFullPath;
+        }
+        const fs = require("fs");
+        const { execSync } = require("child_process");
+        try {
+          execSync(`qlmanage -t -s ${coverSize} -o /tmp "${file.sourcePath}"`, { stdio: "ignore" });
+          const generatedPng = `${file.sourcePath}.png`;
+          if (fs.existsSync(generatedPng)) {
+            const coverData = fs.readFileSync(generatedPng);
+            const base64Data = coverData.toString("base64");
+            yield vault.create(coverFullPath, `data:image/png;base64,${base64Data}`);
+            fs.unlinkSync(generatedPng);
+            return coverFullPath;
+          }
+        } catch (e) {
+          console.log("qlmanage failed, skipping cover generation");
+        }
+        return null;
+      } catch (e) {
+        console.error("Error generating cover:", e);
+        return null;
+      }
+    });
+  }
+  getCoverCacheKey(filePath, mtime) {
+    const crypto = require("crypto");
+    return crypto.createHash("md5").update(filePath + mtime).digest("hex").substring(0, 8);
   }
 };
 var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
@@ -481,6 +638,14 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
       this.plugin.settings.fieldMappings.fileType = value;
       yield this.plugin.saveSettings();
     })));
+    new import_obsidian.Setting(containerEl).setName("Path Rules").setDesc("Add frontmatter based on source path. Most specific rule wins. Fields only fill when missing.").setHeading();
+    const rulesContainer = containerEl.createDiv("file-mapper-path-rules");
+    this.renderPathRules(rulesContainer);
+    new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Add Path Rule").onClick(() => __async(this, null, function* () {
+      this.plugin.settings.pathRules.push({ matchType: "prefix", pattern: "", frontmatter: "" });
+      yield this.plugin.saveSettings();
+      this.display();
+    })));
     new import_obsidian.Setting(containerEl).setName("Date & Time Format").setHeading();
     new import_obsidian.Setting(containerEl).setName("Date Format").setDesc("Format: YYYY-MM-DD, DD/MM/YYYY, etc.").addText((text) => text.setPlaceholder("YYYY-MM-DD").setValue(this.plugin.settings.dateFormat).onChange((value) => __async(this, null, function* () {
       this.plugin.settings.dateFormat = value;
@@ -494,8 +659,43 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
       this.plugin.settings.sizeUnit = value;
       yield this.plugin.saveSettings();
     })));
+    new import_obsidian.Setting(containerEl).setName("Cover Image").setHeading();
+    new import_obsidian.Setting(containerEl).setName("Enable Cover").setDesc("Generate cover images for mapped files").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableCover).onChange((value) => __async(this, null, function* () {
+      this.plugin.settings.enableCover = value;
+      yield this.plugin.saveSettings();
+    })));
+    new import_obsidian.Setting(containerEl).setName("Cover Path").setDesc("Folder to store cover images").addText((text) => text.setPlaceholder("cover-images").setValue(this.plugin.settings.coverPath).onChange((value) => __async(this, null, function* () {
+      this.plugin.settings.coverPath = value;
+      yield this.plugin.saveSettings();
+    })));
+    new import_obsidian.Setting(containerEl).setName("Cover Size").setDesc("Thumbnail size in pixels").addText((text) => text.setPlaceholder("600").setValue(String(this.plugin.settings.coverSize)).onChange((value) => __async(this, null, function* () {
+      this.plugin.settings.coverSize = parseInt(value) || 600;
+      yield this.plugin.saveSettings();
+    })));
     new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Sync Now").onClick(() => __async(this, null, function* () {
       yield this.plugin.syncFiles();
     })));
+  }
+  renderPathRules(containerEl) {
+    containerEl.empty();
+    this.plugin.settings.pathRules.forEach((rule, index) => {
+      new import_obsidian.Setting(containerEl).setName(`Rule ${index + 1}`).setDesc("Most specific rule wins (longest match).").addExtraButton((button) => button.setIcon("trash").setTooltip("Delete rule").onClick(() => __async(this, null, function* () {
+        this.plugin.settings.pathRules.splice(index, 1);
+        yield this.plugin.saveSettings();
+        this.display();
+      })));
+      new import_obsidian.Setting(containerEl).setName("Match Type").addDropdown((dropdown) => dropdown.addOption("prefix", "Prefix").addOption("regex", "Regex").setValue(rule.matchType).onChange((value) => __async(this, null, function* () {
+        rule.matchType = value;
+        yield this.plugin.saveSettings();
+      })));
+      new import_obsidian.Setting(containerEl).setName("Pattern").setDesc("Prefix path or regex pattern.").addText((text) => text.setPlaceholder("/path/to/folder").setValue(rule.pattern).onChange((value) => __async(this, null, function* () {
+        rule.pattern = value;
+        yield this.plugin.saveSettings();
+      })));
+      new import_obsidian.Setting(containerEl).setName("Frontmatter (YAML)").setDesc("YAML snippet without --- delimiters. Fields only fill when missing.").addTextArea((text) => text.setPlaceholder("topic: ai\ncategory: papers").setValue(rule.frontmatter).onChange((value) => __async(this, null, function* () {
+        rule.frontmatter = value;
+        yield this.plugin.saveSettings();
+      })));
+    });
   }
 };
