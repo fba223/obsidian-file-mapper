@@ -1,0 +1,17 @@
+{
+  "sourcePaths": [
+    "/Users/zhangpeng/Documents"
+  ],
+  "targetPath": "Mapped Files",
+  "fileExtensions": ".pdf,.docx,.doc,.mp4,.epub",
+  "fieldMappings": {
+    "fileName": "title",
+    "filePath": "path",
+    "fileSize": "size",
+    "createdDate": "created",
+    "modifiedDate": "modified",
+    "fileType": "type"
+  },
+  "syncInterval": 31,
+  "enabled": true
+}
