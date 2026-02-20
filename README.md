@@ -17,6 +17,7 @@ File Mapper is an Obsidian plugin that automatically maps local files from exter
 - **Auto-Sync** - Automatically detect and sync new, modified, and deleted files
 - **Flexible Date Formatting** - Customize date format (YYYY-MM-DD, DD/MM/YYYY, etc.) with optional time
 - **Size Unit Selection** - Display file sizes in Bytes, KB, MB, or GB
+- **Path-Based Frontmatter Rules** - Add extra metadata (e.g., `topic: ai`) based on source path
 
 ### What It Maps
 
@@ -92,6 +93,24 @@ Customize the YAML frontmatter field names:
 | `modified` | Last modified date |
 | `type` | File extension |
 
+### Path Rules
+
+Add extra frontmatter based on the source path. The most specific rule wins (longest match). Rule fields only fill when the field is missing.
+
+Each rule can add multiple properties:
+- `property` (name)
+- `type` (string/number/boolean/list/json)
+- `value` (text input, defaults vary by type)
+
+Example path match:
+```
+/Users/username/Research/AI
+```
+
+### Frontmatter Merge Behavior
+
+On sync, the plugin preserves existing frontmatter and note body. It only updates plugin-managed fields (file name/path/size/dates/type). Path rules fill missing fields without overwriting your manual edits.
+
 ### Date & Time Format
 
 - **Date Format**: Customize the date format using `YYYY`, `MM`, `DD`
@@ -155,6 +174,7 @@ size: 2.50 MB
 created: 2024-02-20
 modified: 2024-02-21
 type: ".pdf"
+topic: ai
 ---
 [report](file:///Users/username/Documents/report.pdf)
 ```

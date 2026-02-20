@@ -80,7 +80,8 @@ var DEFAULT_SETTINGS = {
   autoSync: false,
   dateFormat: "YYYY-MM-DD",
   dateIncludeTime: false,
-  sizeUnit: "KB"
+  sizeUnit: "KB",
+  pathRules: []
 };
 var FileMapperPlugin = class extends import_obsidian.Plugin {
   constructor() {
@@ -116,7 +117,10 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
   }
   loadSettings() {
     return __async(this, null, function* () {
-      this.settings = __spreadValues(__spreadValues({}, DEFAULT_SETTINGS), yield this.loadData());
+      const data = yield this.loadData();
+      const merged = __spreadValues(__spreadValues({}, DEFAULT_SETTINGS), data);
+      merged.pathRules = this.normalizePathRules(data == null ? void 0 : data.pathRules);
+      this.settings = merged;
     });
   }
   saveSettings() {
@@ -230,6 +234,197 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
   encodeFileUrl(filePath) {
     return "file://" + encodeURIComponent(filePath);
   }
+  extractFrontmatter(content) {
+    const match = content.match(/^---\n([\s\S]*?)\n---\s*\n?/);
+    if (!match) {
+      return { frontmatter: {}, body: content };
+    }
+    let parsed = {};
+    try {
+      const data = (0, import_obsidian.parseYaml)(match[1]);
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        parsed = data;
+      }
+    } catch (e) {
+      parsed = this.parseFrontmatterFallback(match[1]);
+    }
+    const body = content.slice(match[0].length);
+    return { frontmatter: parsed, body };
+  }
+  parseFrontmatterFallback(block) {
+    const result = {};
+    const lines = block.split("\n");
+    for (const line of lines) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx > 0) {
+        const key = line.substring(0, colonIdx).trim();
+        let value = line.substring(colonIdx + 1).trim();
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+  normalizePathForMatch(input) {
+    return input.replace(/[\\/]+$/, "");
+  }
+  getDefaultPropertyValue(type) {
+    switch (type) {
+      case "number":
+        return "0";
+      case "boolean":
+        return "true";
+      case "list":
+        return "";
+      case "json":
+        return "{}";
+      case "string":
+      default:
+        return "";
+    }
+  }
+  inferPropertyType(value) {
+    if (Array.isArray(value))
+      return "list";
+    if (typeof value === "boolean")
+      return "boolean";
+    if (typeof value === "number")
+      return "number";
+    if (value && typeof value === "object")
+      return "json";
+    return "string";
+  }
+  normalizePathRules(rules) {
+    if (!Array.isArray(rules))
+      return [];
+    const normalized = [];
+    for (const rule of rules) {
+      if (!rule || typeof rule !== "object")
+        continue;
+      const matchType = rule.matchType === "regex" ? "regex" : "prefix";
+      const pattern = typeof rule.pattern === "string" ? rule.pattern : "";
+      if (Array.isArray(rule.properties)) {
+        const properties = rule.properties.filter((prop) => prop && typeof prop === "object").map((prop) => ({
+          key: typeof prop.key === "string" ? prop.key : "",
+          type: ["string", "number", "boolean", "list", "json"].includes(prop.type) ? prop.type : "string",
+          value: typeof prop.value === "string" ? prop.value : this.getDefaultPropertyValue("string")
+        }));
+        normalized.push({ matchType, pattern, properties });
+        continue;
+      }
+      if (typeof rule.frontmatter === "string" && rule.frontmatter.trim()) {
+        let parsed = {};
+        try {
+          const data = (0, import_obsidian.parseYaml)(rule.frontmatter);
+          if (data && typeof data === "object" && !Array.isArray(data)) {
+            parsed = data;
+          }
+        } catch (e) {
+          console.warn("Failed to parse legacy rule frontmatter YAML:", e);
+        }
+        const properties = Object.entries(parsed).map(([key, value]) => {
+          const type = this.inferPropertyType(value);
+          let valueString = "";
+          if (type === "list") {
+            valueString = Array.isArray(value) ? value.join(", ") : "";
+          } else if (type === "json") {
+            try {
+              valueString = JSON.stringify(value);
+            } catch (e) {
+              valueString = String(value);
+            }
+          } else {
+            valueString = String(value);
+          }
+          return { key, type, value: valueString };
+        });
+        normalized.push({ matchType, pattern, properties });
+        continue;
+      }
+      normalized.push({ matchType, pattern, properties: [] });
+    }
+    return normalized;
+  }
+  getMostSpecificPathRule(filePath) {
+    var _a, _b, _c;
+    let bestRule = null;
+    let bestScore = -1;
+    for (const rule of this.settings.pathRules) {
+      const pattern = (_a = rule.pattern) == null ? void 0 : _a.trim();
+      if (!pattern)
+        continue;
+      if (rule.matchType === "prefix") {
+        const normalizedPattern = this.normalizePathForMatch(pattern);
+        const normalizedPath = this.normalizePathForMatch(filePath);
+        const isBoundary = normalizedPath === normalizedPattern || normalizedPath.startsWith(normalizedPattern + "/") || normalizedPath.startsWith(normalizedPattern + "\\");
+        if (isBoundary) {
+          const score = normalizedPattern.length;
+          if (score > bestScore) {
+            bestScore = score;
+            bestRule = rule;
+          }
+        }
+      } else if (rule.matchType === "regex") {
+        try {
+          const regex = new RegExp(pattern);
+          const match = filePath.match(regex);
+          if (match) {
+            const score = (_c = (_b = match[0]) == null ? void 0 : _b.length) != null ? _c : 0;
+            if (score > bestScore) {
+              bestScore = score;
+              bestRule = rule;
+            }
+          }
+        } catch (e) {
+          console.warn(`Invalid regex pattern in path rule: ${pattern}`, e);
+        }
+      }
+    }
+    return bestRule;
+  }
+  parseRuleFrontmatter(rule) {
+    var _a;
+    if (!rule || !Array.isArray(rule.properties))
+      return {};
+    const result = {};
+    for (const prop of rule.properties) {
+      const key = (_a = prop.key) == null ? void 0 : _a.trim();
+      if (!key)
+        continue;
+      const value = this.coerceRulePropertyValue(prop.type, prop.value);
+      result[key] = value;
+    }
+    return result;
+  }
+  coerceRulePropertyValue(type, raw) {
+    switch (type) {
+      case "number": {
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : raw;
+      }
+      case "boolean": {
+        const normalized = raw.trim().toLowerCase();
+        return ["true", "1", "yes", "y"].includes(normalized);
+      }
+      case "list": {
+        if (!raw.trim())
+          return [];
+        return raw.split(",").map((item) => item.trim()).filter((item) => item.length > 0);
+      }
+      case "json": {
+        try {
+          return JSON.parse(raw);
+        } catch (e) {
+          return raw;
+        }
+      }
+      case "string":
+      default:
+        return raw;
+    }
+  }
   getUniqueFileName(file, sourceBasePath) {
     const relPath = file.sourcePath.substring(sourceBasePath.length);
     const sanitized = relPath.replace(/[\/\\]/g, "_").replace(/^\s*_\s*/, "").replace(/\s*_\s*$/, "");
@@ -246,11 +441,13 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
           if (child instanceof import_obsidian.TFile && child.extension === "md") {
             try {
               const content = yield this.app.vault.read(child);
-              const frontmatter = this.parseFrontmatter(content);
+              const { frontmatter } = this.extractFrontmatter(content);
+              const mappedPathField = this.settings.fieldMappings.filePath;
+              const sourcePath = frontmatter["source_path"] || (mappedPathField ? frontmatter[mappedPathField] : "") || frontmatter["path"] || "";
               files.push({
                 name: child.basename,
                 path: child.path,
-                sourcePath: frontmatter["source_path"] || "",
+                sourcePath,
                 sourceMtime: parseFloat(frontmatter["source_mtime"]) || 0,
                 size: 0,
                 created: new Date(child.stat.ctime),
@@ -268,23 +465,7 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
     });
   }
   parseFrontmatter(content) {
-    const result = {};
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
-    if (!match)
-      return result;
-    const lines = match[1].split("\n");
-    for (const line of lines) {
-      const colonIdx = line.indexOf(":");
-      if (colonIdx > 0) {
-        const key = line.substring(0, colonIdx).trim();
-        let value = line.substring(colonIdx + 1).trim();
-        if (value.startsWith('"') && value.endsWith('"')) {
-          value = value.slice(1, -1);
-        }
-        result[key] = value;
-      }
-    }
-    return result;
+    return this.extractFrontmatter(content).frontmatter;
   }
   scanSourceFiles(sourcePaths, extensions) {
     return __async(this, null, function* () {
@@ -361,13 +542,15 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       const folder = yield this.ensureTargetFolderByPath(targetPath);
       if (!folder)
         return;
-      const content = this.generateFileContent(file, fieldMappings);
       const filePath = `${targetPath}/${file.name}.md`;
       try {
         const existing = this.app.vault.getAbstractFileByPath(filePath);
         if (existing) {
+          const existingContent = yield this.app.vault.read(existing);
+          const content = this.generateFileContent(file, fieldMappings, existingContent);
           yield this.app.vault.modify(existing, content);
         } else {
+          const content = this.generateFileContent(file, fieldMappings);
           yield this.app.vault.create(filePath, content);
         }
       } catch (e) {
@@ -380,7 +563,8 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       try {
         const existing = this.app.vault.getAbstractFileByPath(existingFilePath);
         if (existing) {
-          const content = this.generateFileContent(file, fieldMappings);
+          const existingContent = yield this.app.vault.read(existing);
+          const content = this.generateFileContent(file, fieldMappings, existingContent);
           yield this.app.vault.modify(existing, content);
         }
       } catch (e) {
@@ -400,21 +584,41 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       }
     });
   }
-  generateFileContent(file, fieldMappings) {
+  generateFileContent(file, fieldMappings, existingContent) {
     const { dateFormat, dateIncludeTime, sizeUnit } = this.settings;
-    const lines = ["---"];
-    lines.push(`${fieldMappings.fileName}: ${this.escapeYaml(file.name)}`);
-    lines.push(`${fieldMappings.filePath}: ${this.escapeYaml(file.sourcePath)}`);
-    lines.push(`source_path: ${this.escapeYaml(file.sourcePath)}`);
-    lines.push(`source_mtime: ${file.sourceMtime}`);
-    lines.push(`${fieldMappings.fileSize}: ${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`);
-    lines.push(`${fieldMappings.createdDate}: ${this.formatDate(file.created, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.modifiedDate}: ${this.formatDate(file.modified, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.fileType}: ${this.escapeYaml(file.extension)}`);
-    lines.push("---");
-    lines.push("");
-    lines.push(`[${file.name}](${this.encodeFileUrl(file.sourcePath)})`);
-    return lines.join("\n");
+    const existing = existingContent ? this.extractFrontmatter(existingContent) : { frontmatter: {}, body: "" };
+    const frontmatter = __spreadValues({}, existing.frontmatter);
+    const body = existingContent ? existing.body : `[${file.name}](${this.encodeFileUrl(file.sourcePath)})`;
+    const pluginFields = /* @__PURE__ */ new Set([
+      fieldMappings.fileName,
+      fieldMappings.filePath,
+      fieldMappings.fileSize,
+      fieldMappings.createdDate,
+      fieldMappings.modifiedDate,
+      fieldMappings.fileType,
+      "source_path",
+      "source_mtime"
+    ]);
+    frontmatter[fieldMappings.fileName] = file.name;
+    frontmatter[fieldMappings.filePath] = file.sourcePath;
+    delete frontmatter["source_path"];
+    frontmatter["source_mtime"] = file.sourceMtime;
+    frontmatter[fieldMappings.fileSize] = `${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`;
+    frontmatter[fieldMappings.createdDate] = this.formatDate(file.created, dateFormat, dateIncludeTime);
+    frontmatter[fieldMappings.modifiedDate] = this.formatDate(file.modified, dateFormat, dateIncludeTime);
+    frontmatter[fieldMappings.fileType] = file.extension;
+    const rule = this.getMostSpecificPathRule(file.sourcePath);
+    const ruleFrontmatter = this.parseRuleFrontmatter(rule);
+    for (const [key, value] of Object.entries(ruleFrontmatter)) {
+      if (pluginFields.has(key))
+        continue;
+      if (Object.prototype.hasOwnProperty.call(frontmatter, key))
+        continue;
+      frontmatter[key] = value;
+    }
+    const yamlBody = (0, import_obsidian.stringifyYaml)(frontmatter).trimEnd();
+    const yamlBlock = yamlBody.length > 0 ? yamlBody : "";
+    return ["---", yamlBlock, "---", "", body].join("\n");
   }
 };
 var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
@@ -481,6 +685,14 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
       this.plugin.settings.fieldMappings.fileType = value;
       yield this.plugin.saveSettings();
     })));
+    new import_obsidian.Setting(containerEl).setName("Path Rules").setDesc("Add frontmatter based on source path. Most specific rule wins. Fields only fill when missing.").setHeading();
+    const rulesContainer = containerEl.createDiv("file-mapper-path-rules");
+    this.renderPathRules(rulesContainer);
+    new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Add Path Rule").onClick(() => __async(this, null, function* () {
+      this.plugin.settings.pathRules.push({ matchType: "prefix", pattern: "", properties: [] });
+      yield this.plugin.saveSettings();
+      this.display();
+    })));
     new import_obsidian.Setting(containerEl).setName("Date & Time Format").setHeading();
     new import_obsidian.Setting(containerEl).setName("Date Format").setDesc("Format: YYYY-MM-DD, DD/MM/YYYY, etc.").addText((text) => text.setPlaceholder("YYYY-MM-DD").setValue(this.plugin.settings.dateFormat).onChange((value) => __async(this, null, function* () {
       this.plugin.settings.dateFormat = value;
@@ -497,5 +709,84 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Sync Now").onClick(() => __async(this, null, function* () {
       yield this.plugin.syncFiles();
     })));
+  }
+  renderPathRules(containerEl) {
+    containerEl.empty();
+    this.plugin.settings.pathRules.forEach((rule, index) => {
+      new import_obsidian.Setting(containerEl).setName(`Rule ${index + 1}`).setDesc("Most specific rule wins (longest match).").addExtraButton((button) => button.setIcon("trash").setTooltip("Delete rule").onClick(() => __async(this, null, function* () {
+        this.plugin.settings.pathRules.splice(index, 1);
+        yield this.plugin.saveSettings();
+        this.display();
+      })));
+      new import_obsidian.Setting(containerEl).setName("Match Type").addDropdown((dropdown) => dropdown.addOption("prefix", "Prefix").addOption("regex", "Regex").setValue(rule.matchType).onChange((value) => __async(this, null, function* () {
+        rule.matchType = value;
+        yield this.plugin.saveSettings();
+      })));
+      new import_obsidian.Setting(containerEl).setName("Pattern").setDesc("Prefix path or regex pattern.").addText((text) => text.setPlaceholder("/path/to/folder").setValue(rule.pattern).onChange((value) => __async(this, null, function* () {
+        rule.pattern = value;
+        yield this.plugin.saveSettings();
+      })));
+      const propertiesContainer = containerEl.createDiv("file-mapper-rule-properties");
+      this.renderRuleProperties(propertiesContainer, rule);
+    });
+  }
+  renderRuleProperties(containerEl, rule) {
+    containerEl.empty();
+    rule.properties.forEach((prop, index) => {
+      new import_obsidian.Setting(containerEl).setName(`Property ${index + 1}`).addText((text) => text.setPlaceholder("property").setValue(prop.key).onChange((value) => __async(this, null, function* () {
+        prop.key = value;
+        yield this.plugin.saveSettings();
+      }))).addDropdown((dropdown) => dropdown.addOption("string", "string").addOption("number", "number").addOption("boolean", "boolean").addOption("list", "list").addOption("json", "json").setValue(prop.type).onChange((value) => __async(this, null, function* () {
+        const previousType = prop.type;
+        prop.type = value;
+        if (!prop.value || prop.value === this.getDefaultPropertyValue(previousType)) {
+          prop.value = this.getDefaultPropertyValue(prop.type);
+        }
+        yield this.plugin.saveSettings();
+        this.display();
+      }))).addText((text) => text.setPlaceholder(this.getPropertyValuePlaceholder(prop.type)).setValue(prop.value).onChange((value) => __async(this, null, function* () {
+        prop.value = value;
+        yield this.plugin.saveSettings();
+      }))).addExtraButton((button) => button.setIcon("trash").setTooltip("Delete property").onClick(() => __async(this, null, function* () {
+        rule.properties.splice(index, 1);
+        yield this.plugin.saveSettings();
+        this.display();
+      })));
+    });
+    new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Add Property").onClick(() => __async(this, null, function* () {
+      rule.properties.push({ key: "", type: "string", value: this.getDefaultPropertyValue("string") });
+      yield this.plugin.saveSettings();
+      this.display();
+    })));
+  }
+  getDefaultPropertyValue(type) {
+    switch (type) {
+      case "number":
+        return "0";
+      case "boolean":
+        return "true";
+      case "list":
+        return "";
+      case "json":
+        return "{}";
+      case "string":
+      default:
+        return "";
+    }
+  }
+  getPropertyValuePlaceholder(type) {
+    switch (type) {
+      case "number":
+        return "0";
+      case "boolean":
+        return "true";
+      case "list":
+        return "item1, item2";
+      case "json":
+        return '{"key":"value"}';
+      case "string":
+      default:
+        return "value";
+    }
   }
 };

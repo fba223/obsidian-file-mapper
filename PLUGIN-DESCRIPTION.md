@@ -15,6 +15,7 @@ File Mapper is an Obsidian plugin that automatically syncs local files from exte
 
 **Customizable Frontmatter**
 - Define custom field names for file metadata
+- Add extra frontmatter based on source path (e.g., `topic: ai`)
 - Configure date formats (YYYY-MM-DD, DD/MM/YYYY, etc.)
 - Toggle time inclusion in dates
 - Choose size units (bytes, KB, MB, GB)
@@ -29,6 +30,7 @@ For each mapped file, the plugin creates a `.md` note with:
 - File name, path, size, type
 - Creation and modification dates
 - All metadata in YAML frontmatter
+ - Preserves your manual frontmatter/body edits on sync
 
 ### Use Cases
 

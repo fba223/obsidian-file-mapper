@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFolder, TFile, Vault } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFolder, TFile, Vault, parseYaml, stringifyYaml } from 'obsidian';
 
 interface FileMapperSettings {
   sourcePaths: string[];
@@ -17,6 +17,22 @@ interface FileMapperSettings {
   dateFormat: string;
   dateIncludeTime: boolean;
   sizeUnit: string;
+  pathRules: PathRule[];
+}
+
+type PathRuleMatchType = 'prefix' | 'regex';
+type RulePropertyType = 'string' | 'number' | 'boolean' | 'list' | 'json';
+
+interface PathRule {
+  matchType: PathRuleMatchType;
+  pattern: string;
+  properties: RuleProperty[];
+}
+
+interface RuleProperty {
+  key: string;
+  type: RulePropertyType;
+  value: string;
 }
 
 interface SourceFile {
@@ -46,7 +62,8 @@ const DEFAULT_SETTINGS: FileMapperSettings = {
   autoSync: false,
   dateFormat: 'YYYY-MM-DD',
   dateIncludeTime: false,
-  sizeUnit: 'KB'
+  sizeUnit: 'KB',
+  pathRules: []
 };
 
 declare global {
@@ -90,7 +107,10 @@ export default class FileMapperPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = { ...DEFAULT_SETTINGS, ...await this.loadData() };
+    const data = await this.loadData();
+    const merged = { ...DEFAULT_SETTINGS, ...data } as FileMapperSettings;
+    merged.pathRules = this.normalizePathRules((data as any)?.pathRules);
+    this.settings = merged;
   }
 
   async saveSettings() {
@@ -219,6 +239,208 @@ export default class FileMapperPlugin extends Plugin {
     return 'file://' + encodeURIComponent(filePath);
   }
 
+  private extractFrontmatter(content: string): { frontmatter: Record<string, any>; body: string } {
+    const match = content.match(/^---\n([\s\S]*?)\n---\s*\n?/);
+    if (!match) {
+      return { frontmatter: {}, body: content };
+    }
+
+    let parsed: Record<string, any> = {};
+    try {
+      const data = parseYaml(match[1]);
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        parsed = data as Record<string, any>;
+      }
+    } catch (e) {
+      parsed = this.parseFrontmatterFallback(match[1]);
+    }
+
+    const body = content.slice(match[0].length);
+    return { frontmatter: parsed, body };
+  }
+
+  private parseFrontmatterFallback(block: string): Record<string, any> {
+    const result: Record<string, any> = {};
+    const lines = block.split('\n');
+    for (const line of lines) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx > 0) {
+        const key = line.substring(0, colonIdx).trim();
+        let value = line.substring(colonIdx + 1).trim();
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  private normalizePathForMatch(input: string): string {
+    return input.replace(/[\\/]+$/, '');
+  }
+
+  private getDefaultPropertyValue(type: RulePropertyType): string {
+    switch (type) {
+      case 'number':
+        return '0';
+      case 'boolean':
+        return 'true';
+      case 'list':
+        return '';
+      case 'json':
+        return '{}';
+      case 'string':
+      default:
+        return '';
+    }
+  }
+
+  private inferPropertyType(value: any): RulePropertyType {
+    if (Array.isArray(value)) return 'list';
+    if (typeof value === 'boolean') return 'boolean';
+    if (typeof value === 'number') return 'number';
+    if (value && typeof value === 'object') return 'json';
+    return 'string';
+  }
+
+  private normalizePathRules(rules: any): PathRule[] {
+    if (!Array.isArray(rules)) return [];
+
+    const normalized: PathRule[] = [];
+    for (const rule of rules) {
+      if (!rule || typeof rule !== 'object') continue;
+      const matchType: PathRuleMatchType = rule.matchType === 'regex' ? 'regex' : 'prefix';
+      const pattern = typeof rule.pattern === 'string' ? rule.pattern : '';
+
+      if (Array.isArray(rule.properties)) {
+        const properties: RuleProperty[] = rule.properties
+          .filter((prop: any) => prop && typeof prop === 'object')
+          .map((prop: any) => ({
+            key: typeof prop.key === 'string' ? prop.key : '',
+            type: (['string', 'number', 'boolean', 'list', 'json'].includes(prop.type) ? prop.type : 'string') as RulePropertyType,
+            value: typeof prop.value === 'string' ? prop.value : this.getDefaultPropertyValue('string')
+          }));
+        normalized.push({ matchType, pattern, properties });
+        continue;
+      }
+
+      if (typeof rule.frontmatter === 'string' && rule.frontmatter.trim()) {
+        let parsed: Record<string, any> = {};
+        try {
+          const data = parseYaml(rule.frontmatter);
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            parsed = data as Record<string, any>;
+          }
+        } catch (e) {
+          console.warn('Failed to parse legacy rule frontmatter YAML:', e);
+        }
+        const properties = Object.entries(parsed).map(([key, value]) => {
+          const type = this.inferPropertyType(value);
+          let valueString = '';
+          if (type === 'list') {
+            valueString = Array.isArray(value) ? value.join(', ') : '';
+          } else if (type === 'json') {
+            try {
+              valueString = JSON.stringify(value);
+            } catch {
+              valueString = String(value);
+            }
+          } else {
+            valueString = String(value);
+          }
+          return { key, type, value: valueString };
+        });
+        normalized.push({ matchType, pattern, properties });
+        continue;
+      }
+
+      normalized.push({ matchType, pattern, properties: [] });
+    }
+
+    return normalized;
+  }
+
+  private getMostSpecificPathRule(filePath: string): PathRule | null {
+    let bestRule: PathRule | null = null;
+    let bestScore = -1;
+
+    for (const rule of this.settings.pathRules) {
+      const pattern = rule.pattern?.trim();
+      if (!pattern) continue;
+
+      if (rule.matchType === 'prefix') {
+        const normalizedPattern = this.normalizePathForMatch(pattern);
+        const normalizedPath = this.normalizePathForMatch(filePath);
+        const isBoundary = normalizedPath === normalizedPattern ||
+          normalizedPath.startsWith(normalizedPattern + '/') ||
+          normalizedPath.startsWith(normalizedPattern + '\\');
+        if (isBoundary) {
+          const score = normalizedPattern.length;
+          if (score > bestScore) {
+            bestScore = score;
+            bestRule = rule;
+          }
+        }
+      } else if (rule.matchType === 'regex') {
+        try {
+          const regex = new RegExp(pattern);
+          const match = filePath.match(regex);
+          if (match) {
+            const score = match[0]?.length ?? 0;
+            if (score > bestScore) {
+              bestScore = score;
+              bestRule = rule;
+            }
+          }
+        } catch (e) {
+          console.warn(`Invalid regex pattern in path rule: ${pattern}`, e);
+        }
+      }
+    }
+
+    return bestRule;
+  }
+
+  private parseRuleFrontmatter(rule: PathRule | null): Record<string, any> {
+    if (!rule || !Array.isArray(rule.properties)) return {};
+    const result: Record<string, any> = {};
+    for (const prop of rule.properties) {
+      const key = prop.key?.trim();
+      if (!key) continue;
+      const value = this.coerceRulePropertyValue(prop.type, prop.value);
+      result[key] = value;
+    }
+    return result;
+  }
+
+  private coerceRulePropertyValue(type: RulePropertyType, raw: string): any {
+    switch (type) {
+      case 'number': {
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : raw;
+      }
+      case 'boolean': {
+        const normalized = raw.trim().toLowerCase();
+        return ['true', '1', 'yes', 'y'].includes(normalized);
+      }
+      case 'list': {
+        if (!raw.trim()) return [];
+        return raw.split(',').map(item => item.trim()).filter(item => item.length > 0);
+      }
+      case 'json': {
+        try {
+          return JSON.parse(raw);
+        } catch (e) {
+          return raw;
+        }
+      }
+      case 'string':
+      default:
+        return raw;
+    }
+  }
+
   private getUniqueFileName(file: SourceFile, sourceBasePath: string): string {
     const relPath = file.sourcePath.substring(sourceBasePath.length);
     const sanitized = relPath.replace(/[\/\\]/g, '_').replace(/^\s*_\s*/, '').replace(/\s*_\s*$/, '');
@@ -235,13 +457,20 @@ export default class FileMapperPlugin extends Plugin {
         if (child instanceof TFile && child.extension === 'md') {
           try {
             const content = await this.app.vault.read(child);
-            const frontmatter = this.parseFrontmatter(content);
+            const { frontmatter } = this.extractFrontmatter(content);
             
+            const mappedPathField = this.settings.fieldMappings.filePath;
+            const sourcePath =
+              frontmatter['source_path'] ||
+              (mappedPathField ? frontmatter[mappedPathField] : '') ||
+              frontmatter['path'] ||
+              '';
+
             files.push({
               name: child.basename,
               path: child.path,
-            sourcePath: frontmatter['source_path'] || '',
-            sourceMtime: parseFloat(frontmatter['source_mtime']) || 0,
+              sourcePath,
+              sourceMtime: parseFloat(frontmatter['source_mtime']) || 0,
               size: 0,
               created: new Date(child.stat.ctime),
               modified: new Date(child.stat.mtime),
@@ -258,23 +487,7 @@ export default class FileMapperPlugin extends Plugin {
   }
 
   private parseFrontmatter(content: string): Record<string, any> {
-    const result: Record<string, any> = {};
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
-    if (!match) return result;
-    
-    const lines = match[1].split('\n');
-    for (const line of lines) {
-      const colonIdx = line.indexOf(':');
-      if (colonIdx > 0) {
-        const key = line.substring(0, colonIdx).trim();
-        let value = line.substring(colonIdx + 1).trim();
-        if (value.startsWith('"') && value.endsWith('"')) {
-          value = value.slice(1, -1);
-        }
-        result[key] = value;
-      }
-    }
-    return result;
+    return this.extractFrontmatter(content).frontmatter;
   }
 
   async scanSourceFiles(sourcePaths: string[], extensions: string[]): Promise<SourceFile[]> {
@@ -353,14 +566,16 @@ export default class FileMapperPlugin extends Plugin {
     const folder = await this.ensureTargetFolderByPath(targetPath);
     if (!folder) return;
     
-    const content = this.generateFileContent(file, fieldMappings);
     const filePath = `${targetPath}/${file.name}.md`;
     
     try {
       const existing = this.app.vault.getAbstractFileByPath(filePath);
       if (existing) {
+        const existingContent = await this.app.vault.read(existing as TFile);
+        const content = this.generateFileContent(file, fieldMappings, existingContent);
         await this.app.vault.modify(existing as TFile, content);
       } else {
+        const content = this.generateFileContent(file, fieldMappings);
         await this.app.vault.create(filePath, content);
       }
     } catch (e) {
@@ -372,7 +587,8 @@ export default class FileMapperPlugin extends Plugin {
     try {
       const existing = this.app.vault.getAbstractFileByPath(existingFilePath);
       if (existing) {
-        const content = this.generateFileContent(file, fieldMappings);
+        const existingContent = await this.app.vault.read(existing as TFile);
+        const content = this.generateFileContent(file, fieldMappings, existingContent);
         await this.app.vault.modify(existing as TFile, content);
       }
     } catch (e) {
@@ -391,22 +607,44 @@ export default class FileMapperPlugin extends Plugin {
     }
   }
 
-  generateFileContent(file: SourceFile, fieldMappings: FileMapperSettings['fieldMappings']): string {
+  generateFileContent(file: SourceFile, fieldMappings: FileMapperSettings['fieldMappings'], existingContent?: string): string {
     const { dateFormat, dateIncludeTime, sizeUnit } = this.settings;
-    
-    const lines = ['---'];
-    lines.push(`${fieldMappings.fileName}: ${this.escapeYaml(file.name)}`);
-    lines.push(`${fieldMappings.filePath}: ${this.escapeYaml(file.sourcePath)}`);
-    lines.push(`source_path: ${this.escapeYaml(file.sourcePath)}`);
-    lines.push(`source_mtime: ${file.sourceMtime}`);
-    lines.push(`${fieldMappings.fileSize}: ${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`);
-    lines.push(`${fieldMappings.createdDate}: ${this.formatDate(file.created, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.modifiedDate}: ${this.formatDate(file.modified, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.fileType}: ${this.escapeYaml(file.extension)}`);
-    lines.push('---');
-    lines.push('');
-    lines.push(`[${file.name}](${this.encodeFileUrl(file.sourcePath)})`);
-    return lines.join('\n');
+
+    const existing = existingContent ? this.extractFrontmatter(existingContent) : { frontmatter: {}, body: '' };
+    const frontmatter: Record<string, any> = { ...existing.frontmatter };
+    const body = existingContent ? existing.body : `[${file.name}](${this.encodeFileUrl(file.sourcePath)})`;
+
+    const pluginFields = new Set<string>([
+      fieldMappings.fileName,
+      fieldMappings.filePath,
+      fieldMappings.fileSize,
+      fieldMappings.createdDate,
+      fieldMappings.modifiedDate,
+      fieldMappings.fileType,
+      'source_path',
+      'source_mtime'
+    ]);
+
+    frontmatter[fieldMappings.fileName] = file.name;
+    frontmatter[fieldMappings.filePath] = file.sourcePath;
+    delete frontmatter['source_path'];
+    frontmatter['source_mtime'] = file.sourceMtime;
+    frontmatter[fieldMappings.fileSize] = `${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`;
+    frontmatter[fieldMappings.createdDate] = this.formatDate(file.created, dateFormat, dateIncludeTime);
+    frontmatter[fieldMappings.modifiedDate] = this.formatDate(file.modified, dateFormat, dateIncludeTime);
+    frontmatter[fieldMappings.fileType] = file.extension;
+
+    const rule = this.getMostSpecificPathRule(file.sourcePath);
+    const ruleFrontmatter = this.parseRuleFrontmatter(rule);
+    for (const [key, value] of Object.entries(ruleFrontmatter)) {
+      if (pluginFields.has(key)) continue;
+      if (Object.prototype.hasOwnProperty.call(frontmatter, key)) continue;
+      frontmatter[key] = value;
+    }
+
+    const yamlBody = stringifyYaml(frontmatter).trimEnd();
+    const yamlBlock = yamlBody.length > 0 ? yamlBody : '';
+    return ['---', yamlBlock, '---', '', body].join('\n');
   }
 }
 
@@ -550,6 +788,23 @@ class FileMapperSettingTab extends PluginSettingTab {
           this.plugin.settings.fieldMappings.fileType = value;
           await this.plugin.saveSettings();
         }));
+
+    new Setting(containerEl)
+      .setName('Path Rules')
+      .setDesc('Add frontmatter based on source path. Most specific rule wins. Fields only fill when missing.')
+      .setHeading();
+
+    const rulesContainer = containerEl.createDiv('file-mapper-path-rules');
+    this.renderPathRules(rulesContainer);
+
+    new Setting(containerEl)
+      .addButton(button => button
+        .setButtonText('Add Path Rule')
+        .onClick(async () => {
+          this.plugin.settings.pathRules.push({ matchType: 'prefix', pattern: '', properties: [] });
+          await this.plugin.saveSettings();
+          this.display();
+        }));
     
     new Setting(containerEl)
       .setName('Date & Time Format')
@@ -596,5 +851,136 @@ class FileMapperSettingTab extends PluginSettingTab {
         .onClick(async () => {
           await this.plugin.syncFiles();
         }));
+  }
+
+  private renderPathRules(containerEl: HTMLElement) {
+    containerEl.empty();
+
+    this.plugin.settings.pathRules.forEach((rule, index) => {
+      new Setting(containerEl)
+        .setName(`Rule ${index + 1}`)
+        .setDesc('Most specific rule wins (longest match).')
+        .addExtraButton(button => button
+          .setIcon('trash')
+          .setTooltip('Delete rule')
+          .onClick(async () => {
+            this.plugin.settings.pathRules.splice(index, 1);
+            await this.plugin.saveSettings();
+            this.display();
+          }));
+
+      new Setting(containerEl)
+        .setName('Match Type')
+        .addDropdown(dropdown => dropdown
+          .addOption('prefix', 'Prefix')
+          .addOption('regex', 'Regex')
+          .setValue(rule.matchType)
+          .onChange(async (value) => {
+            rule.matchType = value as PathRuleMatchType;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Pattern')
+        .setDesc('Prefix path or regex pattern.')
+        .addText(text => text
+          .setPlaceholder('/path/to/folder')
+          .setValue(rule.pattern)
+          .onChange(async (value) => {
+            rule.pattern = value;
+            await this.plugin.saveSettings();
+          }));
+
+      const propertiesContainer = containerEl.createDiv('file-mapper-rule-properties');
+      this.renderRuleProperties(propertiesContainer, rule);
+    });
+  }
+
+  private renderRuleProperties(containerEl: HTMLElement, rule: PathRule) {
+    containerEl.empty();
+
+    rule.properties.forEach((prop, index) => {
+      new Setting(containerEl)
+        .setName(`Property ${index + 1}`)
+        .addText(text => text
+          .setPlaceholder('property')
+          .setValue(prop.key)
+          .onChange(async (value) => {
+            prop.key = value;
+            await this.plugin.saveSettings();
+          }))
+        .addDropdown(dropdown => dropdown
+          .addOption('string', 'string')
+          .addOption('number', 'number')
+          .addOption('boolean', 'boolean')
+          .addOption('list', 'list')
+          .addOption('json', 'json')
+          .setValue(prop.type)
+          .onChange(async (value) => {
+            const previousType = prop.type;
+            prop.type = value as RulePropertyType;
+            if (!prop.value || prop.value === this.getDefaultPropertyValue(previousType)) {
+              prop.value = this.getDefaultPropertyValue(prop.type);
+            }
+            await this.plugin.saveSettings();
+            this.display();
+          }))
+        .addText(text => text
+          .setPlaceholder(this.getPropertyValuePlaceholder(prop.type))
+          .setValue(prop.value)
+          .onChange(async (value) => {
+            prop.value = value;
+            await this.plugin.saveSettings();
+          }))
+        .addExtraButton(button => button
+          .setIcon('trash')
+          .setTooltip('Delete property')
+          .onClick(async () => {
+            rule.properties.splice(index, 1);
+            await this.plugin.saveSettings();
+            this.display();
+          }));
+    });
+
+    new Setting(containerEl)
+      .addButton(button => button
+        .setButtonText('Add Property')
+        .onClick(async () => {
+          rule.properties.push({ key: '', type: 'string', value: this.getDefaultPropertyValue('string') });
+          await this.plugin.saveSettings();
+          this.display();
+        }));
+  }
+
+  private getDefaultPropertyValue(type: RulePropertyType): string {
+    switch (type) {
+      case 'number':
+        return '0';
+      case 'boolean':
+        return 'true';
+      case 'list':
+        return '';
+      case 'json':
+        return '{}';
+      case 'string':
+      default:
+        return '';
+    }
+  }
+
+  private getPropertyValuePlaceholder(type: RulePropertyType): string {
+    switch (type) {
+      case 'number':
+        return '0';
+      case 'boolean':
+        return 'true';
+      case 'list':
+        return 'item1, item2';
+      case 'json':
+        return '{\"key\":\"value\"}';
+      case 'string':
+      default:
+        return 'value';
+    }
   }
 }
