@@ -2,9 +2,9 @@
 
 > Map local files to Obsidian with custom YAML frontmatter
 
-[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/your-username/obsidian-file-mapper?style=flat-square)](https://github.com/your-username/obsidian-file-mapper/releases/latest)
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/fba223/obsidian-file-mapper?style=flat-square)](https://github.com/fba223/obsidian-file-mapper/releases/latest)
 [![Obsidian plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?style=flat-square)](https://obsidian.md)
-[![License](https://img.shields.io/github/license/your-username/obsidian-file-mapper?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/github/license/fba223/obsidian-file-mapper?style=flat-square)](LICENSE)
 
 File Mapper is an Obsidian plugin that automatically maps local files from external folders into your Obsidian vault with customizable YAML frontmatter. Perfect for managing PDFs, documents, videos, and other files outside your vault while maintaining full searchability and organization within Obsidian.
 
@@ -39,11 +39,14 @@ For each file, the plugin creates a corresponding `.md` file with:
 3. Search for "File Mapper"
 4. Click **Install** and then **Enable**
 
-### Manual Installation
+### Manual Installation (2 Files Only)
 
-1. Download the latest release from GitHub
-2. Extract the folder to `<vault>/.obsidian/plugins/file-mapper/`
-3. Enable the plugin in Obsidian settings
+1. Create a folder named `file-mapper` in `<vault>/.obsidian/plugins/`
+2. Download `main.js` and `manifest.json` from the [latest release](https://github.com/fba223/obsidian-file-mapper/releases)
+3. Put both files in the folder
+4. Enable the plugin in Obsidian settings
+
+That's it! The plugin will generate `data.json` with settings on first run.
 
 ## Settings
 
@@ -164,8 +167,8 @@ type: ".pdf"
 
 ## Support
 
-- Report bugs: [GitHub Issues](https://github.com/your-username/obsidian-file-mapper/issues)
-- Feature requests: [GitHub Discussions](https://github.com/your-username/obsidian-file-mapper/discussions)
+- Report bugs: [GitHub Issues](https://github.com/fba223/obsidian-file-mapper/issues)
+- Feature requests: [GitHub Discussions](https://github.com/fba223/obsidian-file-mapper/discussions)
 
 ## License
 
