@@ -1,5 +1,7 @@
 var __defProp = Object.defineProperty;
+var __defProps = Object.defineProperties;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getOwnPropSymbols = Object.getOwnPropertySymbols;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
@@ -16,6 +18,7 @@ var __spreadValues = (a, b) => {
     }
   return a;
 };
+var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -172,24 +175,49 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       const extensions = fileExtensions.split(",").map((e) => e.trim().toLowerCase());
       const existingFiles = yield this.getExistingMappedFiles(targetPath);
       const scannedFiles = yield this.scanSourceFiles(sourcePaths, extensions);
-      const existingPaths = new Set(existingFiles.map((f) => f.path));
-      const scannedPaths = new Set(scannedFiles.map((f) => f.path));
-      const added = scannedFiles.filter((f) => !existingPaths.has(f.path));
-      const deleted = existingFiles.filter((f) => !scannedPaths.has(f.path));
+      const existingSourcePaths = new Set(existingFiles.map((f) => f.sourcePath));
+      const scannedSourcePaths = new Set(scannedFiles.map((f) => f.sourcePath));
+      const added = scannedFiles.filter((f) => !existingSourcePaths.has(f.sourcePath));
+      const deleted = existingFiles.filter((f) => !scannedSourcePaths.has(f.sourcePath));
       for (const file of deleted) {
-        yield this.deleteMappedFile(targetPath, file.name);
+        yield this.deleteMappedFile(targetPath, file.path);
       }
       for (const file of added) {
-        yield this.createMappedFile(targetPath, file, fieldMappings);
+        const uniqueName = this.getUniqueFileName(file, sourcePaths[0]);
+        const fileWithUniqueName = __spreadProps(__spreadValues({}, file), { name: uniqueName });
+        yield this.createMappedFile(targetPath, fileWithUniqueName, fieldMappings);
       }
       const updated = scannedFiles.filter((f) => {
-        const existing = existingFiles.find((e) => e.path === f.path);
-        return existing && existing.modified.getTime() !== f.modified.getTime();
+        const existing = existingFiles.find((e) => e.sourcePath === f.sourcePath);
+        if (!existing)
+          return false;
+        return existing.sourceMtime !== f.sourceMtime;
       });
       for (const file of updated) {
-        yield this.updateMappedFile(targetPath, file, fieldMappings);
+        const existing = existingFiles.find((e) => e.sourcePath === file.sourcePath);
+        if (existing) {
+          const uniqueName = this.getUniqueFileName(file, sourcePaths[0]);
+          const fileWithUniqueName = __spreadProps(__spreadValues({}, file), { name: uniqueName });
+          yield this.updateMappedFile(targetPath, existing.path, fileWithUniqueName, fieldMappings);
+        }
       }
     });
+  }
+  escapeYaml(str) {
+    if (!str)
+      return '""';
+    if (str.includes('"') || str.includes("\n") || str.includes(":") || str.startsWith(" ")) {
+      return `"${str.replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
+    }
+    return `"${str}"`;
+  }
+  encodeFileUrl(filePath) {
+    return "file://" + encodeURIComponent(filePath);
+  }
+  getUniqueFileName(file, sourceBasePath) {
+    const relPath = file.sourcePath.substring(sourceBasePath.length);
+    const sanitized = relPath.replace(/[\/\\]/g, "_").replace(/^\s*_\s*/, "").replace(/\s*_\s*$/, "");
+    return sanitized || file.name;
   }
   getExistingMappedFiles(targetPath) {
     return __async(this, null, function* () {
@@ -197,24 +225,50 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       if (!folder)
         return [];
       const files = [];
-      const processFolder = (f) => {
+      const processFolder = (f) => __async(this, null, function* () {
         for (const child of f.children) {
           if (child instanceof import_obsidian.TFile && child.extension === "md") {
-            const stat = child.stat;
-            files.push({
-              name: child.basename,
-              path: child.path,
-              size: 0,
-              created: new Date(stat.ctime),
-              modified: new Date(stat.mtime),
-              extension: ".md"
-            });
+            try {
+              const content = yield this.app.vault.read(child);
+              const frontmatter = this.parseFrontmatter(content);
+              files.push({
+                name: child.basename,
+                path: child.path,
+                sourcePath: frontmatter.sourcePath || "",
+                sourceMtime: frontmatter.sourceMtime || 0,
+                size: 0,
+                created: new Date(child.stat.ctime),
+                modified: new Date(child.stat.mtime),
+                extension: ".md"
+              });
+            } catch (e) {
+              console.error(`Error reading mapped file ${child.path}:`, e);
+            }
           }
         }
-      };
-      processFolder(folder);
+      });
+      yield processFolder(folder);
       return files;
     });
+  }
+  parseFrontmatter(content) {
+    const result = {};
+    const match = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!match)
+      return result;
+    const lines = match[1].split("\n");
+    for (const line of lines) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx > 0) {
+        const key = line.substring(0, colonIdx).trim();
+        let value = line.substring(colonIdx + 1).trim();
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        result[key] = value;
+      }
+    }
+    return result;
   }
   scanSourceFiles(sourcePaths, extensions) {
     return __async(this, null, function* () {
@@ -227,8 +281,10 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       }
       for (const sourcePath of sourcePaths) {
         try {
-          if (!fs.existsSync(sourcePath))
+          if (!fs.existsSync(sourcePath)) {
+            console.warn(`Source path does not exist: ${sourcePath}`);
             continue;
+          }
           const scanDir = (dir) => {
             try {
               const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -241,25 +297,30 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
                   if (extensions.includes(ext)) {
                     try {
                       const stat = fs.statSync(fullPath);
+                      const baseName = path.basename(entry.name, ext);
                       files.push({
-                        name: path.basename(entry.name, ext),
+                        name: baseName,
                         path: fullPath,
+                        sourcePath: fullPath,
+                        sourceMtime: stat.mtimeMs,
                         size: stat.size,
                         created: stat.birthtime,
                         modified: stat.mtime,
                         extension: ext
                       });
                     } catch (e) {
+                      console.error(`Error stating file ${fullPath}:`, e);
                     }
                   }
                 }
               }
             } catch (e) {
+              console.error(`Error scanning directory ${dir}:`, e);
             }
           };
           scanDir(sourcePath);
         } catch (e) {
-          console.error(`Error scanning ${sourcePath}:`, e);
+          console.error(`Error scanning source path ${sourcePath}:`, e);
         }
       }
       return files;
@@ -298,11 +359,10 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       }
     });
   }
-  updateMappedFile(targetPath, file, fieldMappings) {
+  updateMappedFile(targetPath, existingFilePath, file, fieldMappings) {
     return __async(this, null, function* () {
-      const filePath = `${targetPath}/${file.name}.md`;
       try {
-        const existing = this.app.vault.getAbstractFileByPath(filePath);
+        const existing = this.app.vault.getAbstractFileByPath(existingFilePath);
         if (existing) {
           const content = this.generateFileContent(file, fieldMappings);
           yield this.app.vault.modify(existing, content);
@@ -312,9 +372,8 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       }
     });
   }
-  deleteMappedFile(targetPath, name) {
+  deleteMappedFile(targetPath, filePath) {
     return __async(this, null, function* () {
-      const filePath = `${targetPath}/${name}.md`;
       try {
         const existing = this.app.vault.getAbstractFileByPath(filePath);
         if (existing) {
@@ -328,15 +387,17 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
   generateFileContent(file, fieldMappings) {
     const { dateFormat, dateIncludeTime, sizeUnit } = this.settings;
     const lines = ["---"];
-    lines.push(`${fieldMappings.fileName}: "${file.name}"`);
-    lines.push(`${fieldMappings.filePath}: "${file.path}"`);
+    lines.push(`${fieldMappings.fileName}: ${this.escapeYaml(file.name)}`);
+    lines.push(`${fieldMappings.filePath}: ${this.escapeYaml(file.sourcePath)}`);
+    lines.push(`source_path: ${this.escapeYaml(file.sourcePath)}`);
+    lines.push(`source_mtime: ${file.sourceMtime}`);
     lines.push(`${fieldMappings.fileSize}: ${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`);
     lines.push(`${fieldMappings.createdDate}: ${this.formatDate(file.created, dateFormat, dateIncludeTime)}`);
     lines.push(`${fieldMappings.modifiedDate}: ${this.formatDate(file.modified, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.fileType}: "${file.extension}"`);
+    lines.push(`${fieldMappings.fileType}: ${this.escapeYaml(file.extension)}`);
     lines.push("---");
     lines.push("");
-    lines.push(`[${file.name}](file://${file.path.replace(/ /g, "%20")})`);
+    lines.push(`[${file.name}](${this.encodeFileUrl(file.sourcePath)})`);
     return lines.join("\n");
   }
 };
@@ -369,15 +430,6 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("File Extensions").setDesc("Comma-separated list of file extensions to map (e.g., .pdf,.docx,.mp4)").addText((text) => text.setPlaceholder(".pdf,.docx,.doc").setValue(this.plugin.settings.fileExtensions).onChange((value) => __async(this, null, function* () {
       this.plugin.settings.fileExtensions = value;
       yield this.plugin.saveSettings();
-    })));
-    new import_obsidian.Setting(containerEl).setName("Auto Sync").setDesc("Enable automatic file synchronization").addToggle((toggle) => toggle.setValue(this.plugin.settings.autoSync).onChange((value) => __async(this, null, function* () {
-      this.plugin.settings.autoSync = value;
-      yield this.plugin.saveSettings();
-      if (value) {
-        this.plugin.startSync();
-      } else {
-        this.plugin.stopSync();
-      }
     })));
     new import_obsidian.Setting(containerEl).setName("Sync Duration (minutes)").setDesc("How often to sync in minutes").addText((text) => text.setPlaceholder("60").setValue(String(this.plugin.settings.syncDuration)).onChange((value) => __async(this, null, function* () {
       const num = parseInt(value, 10);

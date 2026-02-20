@@ -13,9 +13,11 @@
     "modifiedDate": "modified",
     "fileType": "type"
   },
-  "syncInterval": 16,
-  "enabled": true,
+  "syncDuration": 60,
+  "autoSync": true,
   "dateFormat": "YYYY-MM-DD",
   "dateIncludeTime": false,
-  "sizeUnit": "MB"
+  "sizeUnit": "MB",
+  "syncInterval": 16,
+  "enabled": true
 }

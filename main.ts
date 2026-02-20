@@ -22,6 +22,8 @@ interface FileMapperSettings {
 interface SourceFile {
   name: string;
   path: string;
+  sourcePath: string;
+  sourceMtime: number;
   size: number;
   created: Date;
   modified: Date;
@@ -154,28 +156,54 @@ export default class FileMapperPlugin extends Plugin {
     const existingFiles = await this.getExistingMappedFiles(targetPath);
     const scannedFiles = await this.scanSourceFiles(sourcePaths, extensions);
     
-    const existingPaths = new Set(existingFiles.map(f => f.path));
-    const scannedPaths = new Set(scannedFiles.map(f => f.path));
+    const existingSourcePaths = new Set(existingFiles.map(f => f.sourcePath));
+    const scannedSourcePaths = new Set(scannedFiles.map(f => f.sourcePath));
     
-    const added = scannedFiles.filter(f => !existingPaths.has(f.path));
-    const deleted = existingFiles.filter(f => !scannedPaths.has(f.path));
+    const added = scannedFiles.filter(f => !existingSourcePaths.has(f.sourcePath));
+    const deleted = existingFiles.filter(f => !scannedSourcePaths.has(f.sourcePath));
     
     for (const file of deleted) {
-      await this.deleteMappedFile(targetPath, file.name);
+      await this.deleteMappedFile(targetPath, file.path);
     }
     
     for (const file of added) {
-      await this.createMappedFile(targetPath, file, fieldMappings);
+      const uniqueName = this.getUniqueFileName(file, sourcePaths[0]);
+      const fileWithUniqueName = { ...file, name: uniqueName };
+      await this.createMappedFile(targetPath, fileWithUniqueName, fieldMappings);
     }
     
     const updated = scannedFiles.filter(f => {
-      const existing = existingFiles.find(e => e.path === f.path);
-      return existing && existing.modified.getTime() !== f.modified.getTime();
+      const existing = existingFiles.find(e => e.sourcePath === f.sourcePath);
+      if (!existing) return false;
+      return existing.sourceMtime !== f.sourceMtime;
     });
     
     for (const file of updated) {
-      await this.updateMappedFile(targetPath, file, fieldMappings);
+      const existing = existingFiles.find(e => e.sourcePath === file.sourcePath);
+      if (existing) {
+        const uniqueName = this.getUniqueFileName(file, sourcePaths[0]);
+        const fileWithUniqueName = { ...file, name: uniqueName };
+        await this.updateMappedFile(targetPath, existing.path, fileWithUniqueName, fieldMappings);
+      }
     }
+  }
+
+  private escapeYaml(str: string): string {
+    if (!str) return '""';
+    if (str.includes('"') || str.includes('\n') || str.includes(':') || str.startsWith(' ')) {
+      return `"${str.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
+    }
+    return `"${str}"`;
+  }
+
+  private encodeFileUrl(filePath: string): string {
+    return 'file://' + encodeURIComponent(filePath);
+  }
+
+  private getUniqueFileName(file: SourceFile, sourceBasePath: string): string {
+    const relPath = file.sourcePath.substring(sourceBasePath.length);
+    const sanitized = relPath.replace(/[\/\\]/g, '_').replace(/^\s*_\s*/, '').replace(/\s*_\s*$/, '');
+    return sanitized || file.name;
   }
 
   async getExistingMappedFiles(targetPath: string): Promise<SourceFile[]> {
@@ -183,23 +211,51 @@ export default class FileMapperPlugin extends Plugin {
     if (!folder) return [];
     
     const files: SourceFile[] = [];
-    const processFolder = (f: TFolder) => {
+    const processFolder = async (f: TFolder) => {
       for (const child of f.children) {
         if (child instanceof TFile && child.extension === 'md') {
-          const stat = child.stat;
-          files.push({
-            name: child.basename,
-            path: child.path,
-            size: 0,
-            created: new Date(stat.ctime),
-            modified: new Date(stat.mtime),
-            extension: '.md'
-          });
+          try {
+            const content = await this.app.vault.read(child);
+            const frontmatter = this.parseFrontmatter(content);
+            
+            files.push({
+              name: child.basename,
+              path: child.path,
+              sourcePath: frontmatter.sourcePath || '',
+              sourceMtime: frontmatter.sourceMtime || 0,
+              size: 0,
+              created: new Date(child.stat.ctime),
+              modified: new Date(child.stat.mtime),
+              extension: '.md'
+            });
+          } catch (e) {
+            console.error(`Error reading mapped file ${child.path}:`, e);
+          }
         }
       }
     };
-    processFolder(folder);
+    await processFolder(folder);
     return files;
+  }
+
+  private parseFrontmatter(content: string): Record<string, any> {
+    const result: Record<string, any> = {};
+    const match = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!match) return result;
+    
+    const lines = match[1].split('\n');
+    for (const line of lines) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx > 0) {
+        const key = line.substring(0, colonIdx).trim();
+        let value = line.substring(colonIdx + 1).trim();
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        result[key] = value;
+      }
+    }
+    return result;
   }
 
   async scanSourceFiles(sourcePaths: string[], extensions: string[]): Promise<SourceFile[]> {
@@ -214,7 +270,10 @@ export default class FileMapperPlugin extends Plugin {
     
     for (const sourcePath of sourcePaths) {
       try {
-        if (!fs.existsSync(sourcePath)) continue;
+        if (!fs.existsSync(sourcePath)) {
+          console.warn(`Source path does not exist: ${sourcePath}`);
+          continue;
+        }
         
         const scanDir = (dir: string) => {
           try {
@@ -228,23 +287,30 @@ export default class FileMapperPlugin extends Plugin {
                 if (extensions.includes(ext)) {
                   try {
                     const stat = fs.statSync(fullPath);
+                    const baseName = path.basename(entry.name, ext);
                     files.push({
-                      name: path.basename(entry.name, ext),
+                      name: baseName,
                       path: fullPath,
+                      sourcePath: fullPath,
+                      sourceMtime: stat.mtimeMs,
                       size: stat.size,
                       created: stat.birthtime,
                       modified: stat.mtime,
                       extension: ext
                     });
-                  } catch (e) {}
+                  } catch (e) {
+                    console.error(`Error stating file ${fullPath}:`, e);
+                  }
                 }
               }
             }
-          } catch (e) {}
+          } catch (e) {
+            console.error(`Error scanning directory ${dir}:`, e);
+          }
         };
         scanDir(sourcePath);
       } catch (e) {
-        console.error(`Error scanning ${sourcePath}:`, e);
+        console.error(`Error scanning source path ${sourcePath}:`, e);
       }
     }
     
@@ -283,10 +349,9 @@ export default class FileMapperPlugin extends Plugin {
     }
   }
 
-  async updateMappedFile(targetPath: string, file: SourceFile, fieldMappings: FileMapperSettings['fieldMappings']) {
-    const filePath = `${targetPath}/${file.name}.md`;
+  async updateMappedFile(targetPath: string, existingFilePath: string, file: SourceFile, fieldMappings: FileMapperSettings['fieldMappings']) {
     try {
-      const existing = this.app.vault.getAbstractFileByPath(filePath);
+      const existing = this.app.vault.getAbstractFileByPath(existingFilePath);
       if (existing) {
         const content = this.generateFileContent(file, fieldMappings);
         await this.app.vault.modify(existing as TFile, content);
@@ -296,8 +361,7 @@ export default class FileMapperPlugin extends Plugin {
     }
   }
 
-  async deleteMappedFile(targetPath: string, name: string) {
-    const filePath = `${targetPath}/${name}.md`;
+  async deleteMappedFile(targetPath: string, filePath: string) {
     try {
       const existing = this.app.vault.getAbstractFileByPath(filePath);
       if (existing) {
@@ -312,15 +376,17 @@ export default class FileMapperPlugin extends Plugin {
     const { dateFormat, dateIncludeTime, sizeUnit } = this.settings;
     
     const lines = ['---'];
-    lines.push(`${fieldMappings.fileName}: "${file.name}"`);
-    lines.push(`${fieldMappings.filePath}: "${file.path}"`);
+    lines.push(`${fieldMappings.fileName}: ${this.escapeYaml(file.name)}`);
+    lines.push(`${fieldMappings.filePath}: ${this.escapeYaml(file.sourcePath)}`);
+    lines.push(`source_path: ${this.escapeYaml(file.sourcePath)}`);
+    lines.push(`source_mtime: ${file.sourceMtime}`);
     lines.push(`${fieldMappings.fileSize}: ${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`);
     lines.push(`${fieldMappings.createdDate}: ${this.formatDate(file.created, dateFormat, dateIncludeTime)}`);
     lines.push(`${fieldMappings.modifiedDate}: ${this.formatDate(file.modified, dateFormat, dateIncludeTime)}`);
-    lines.push(`${fieldMappings.fileType}: "${file.extension}"`);
+    lines.push(`${fieldMappings.fileType}: ${this.escapeYaml(file.extension)}`);
     lines.push('---');
     lines.push('');
-    lines.push(`[${file.name}](file://${file.path.replace(/ /g, '%20')})`);
+    lines.push(`[${file.name}](${this.encodeFileUrl(file.sourcePath)})`);
     return lines.join('\n');
   }
 }
@@ -383,21 +449,6 @@ class FileMapperSettingTab extends PluginSettingTab {
         .onChange(async (value) => {
           this.plugin.settings.fileExtensions = value;
           await this.plugin.saveSettings();
-        }));
-    
-    new Setting(containerEl)
-      .setName('Auto Sync')
-      .setDesc('Enable automatic file synchronization')
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.autoSync)
-        .onChange(async (value) => {
-          this.plugin.settings.autoSync = value;
-          await this.plugin.saveSettings();
-          if (value) {
-            this.plugin.startSync();
-          } else {
-            this.plugin.stopSync();
-          }
         }));
     
     new Setting(containerEl)
