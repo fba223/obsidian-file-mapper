@@ -74,7 +74,10 @@ var DEFAULT_SETTINGS = {
     fileType: "type"
   },
   syncInterval: 30,
-  enabled: false
+  enabled: false,
+  dateFormat: "YYYY-MM-DD",
+  dateIncludeTime: false,
+  sizeUnit: "KB"
 };
 var FileMapperPlugin = class extends import_obsidian.Plugin {
   constructor() {
@@ -135,6 +138,31 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
     } catch (e) {
     }
     return null;
+  }
+  formatDate(date, format, includeTime) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
+    let result = format.replace("YYYY", String(year)).replace("MM", month).replace("DD", day);
+    if (includeTime) {
+      result += ` ${hours}:${minutes}:${seconds}`;
+    }
+    return result;
+  }
+  formatSize(sizeInBytes, unit) {
+    switch (unit) {
+      case "GB":
+        return (sizeInBytes / (1024 * 1024 * 1024)).toFixed(2);
+      case "MB":
+        return (sizeInBytes / (1024 * 1024)).toFixed(2);
+      case "KB":
+        return (sizeInBytes / 1024).toFixed(2);
+      default:
+        return String(sizeInBytes);
+    }
   }
   syncFiles() {
     return __async(this, null, function* () {
@@ -298,12 +326,13 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
     });
   }
   generateFileContent(file, fieldMappings) {
+    const { dateFormat, dateIncludeTime, sizeUnit } = this.settings;
     const lines = ["---"];
     lines.push(`${fieldMappings.fileName}: "${file.name}"`);
     lines.push(`${fieldMappings.filePath}: "${file.path}"`);
-    lines.push(`${fieldMappings.fileSize}: ${file.size}`);
-    lines.push(`${fieldMappings.createdDate}: ${file.created.toISOString()}`);
-    lines.push(`${fieldMappings.modifiedDate}: ${file.modified.toISOString()}`);
+    lines.push(`${fieldMappings.fileSize}: ${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`);
+    lines.push(`${fieldMappings.createdDate}: ${this.formatDate(file.created, dateFormat, dateIncludeTime)}`);
+    lines.push(`${fieldMappings.modifiedDate}: ${this.formatDate(file.modified, dateFormat, dateIncludeTime)}`);
     lines.push(`${fieldMappings.fileType}: "${file.extension}"`);
     lines.push("---");
     lines.push("");
@@ -329,8 +358,8 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
         this.plugin.stopSync();
       }
     })));
-    new import_obsidian.Setting(containerEl).setName("Source Paths").setDesc("Comma-separated list of source directories to scan").addText((text) => text.setPlaceholder("/path/to/documents").setValue(this.plugin.settings.sourcePaths.join(", ")).onChange((value) => __async(this, null, function* () {
-      this.plugin.settings.sourcePaths = value.split(",").map((p) => p.trim());
+    new import_obsidian.Setting(containerEl).setName("Source Paths (Multiple)").setDesc("Add multiple paths, one per line. Files from all paths will be mapped.").addTextArea((text) => text.setPlaceholder("/path/to/documents\n/other/path").setValue(this.plugin.settings.sourcePaths.join("\n")).onChange((value) => __async(this, null, function* () {
+      this.plugin.settings.sourcePaths = value.split("\n").map((p) => p.trim()).filter((p) => p);
       yield this.plugin.saveSettings();
     })));
     new import_obsidian.Setting(containerEl).setName("Target Path").setDesc("Path in Obsidian vault where mapped files will be created").addText((text) => text.setPlaceholder("Mapped Files").setValue(this.plugin.settings.targetPath).onChange((value) => __async(this, null, function* () {
@@ -341,9 +370,22 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
       this.plugin.settings.fileExtensions = value;
       yield this.plugin.saveSettings();
     })));
-    new import_obsidian.Setting(containerEl).setName("Sync Interval").setDesc("How often to check for changes (in minutes)").addSlider((slider) => slider.setLimits(1, 60, 5).setValue(this.plugin.settings.syncInterval).onChange((value) => __async(this, null, function* () {
+    const intervalSetting = new import_obsidian.Setting(containerEl).setName("Sync Interval").setDesc("How often to check for changes");
+    let intervalDisplay;
+    intervalSetting.descEl.createSpan({}, (span) => {
+      span.style.display = "inline-block";
+      span.style.marginLeft = "8px";
+      span.style.color = "var(--text-muted)";
+      intervalDisplay = span;
+      const mins = this.plugin.settings.syncInterval;
+      span.textContent = `(${mins} minute${mins !== 1 ? "s" : ""})`;
+    });
+    intervalSetting.addSlider((slider) => slider.setLimits(1, 60, 5).setValue(this.plugin.settings.syncInterval).onChange((value) => __async(this, null, function* () {
       this.plugin.settings.syncInterval = value;
       yield this.plugin.saveSettings();
+      if (intervalDisplay) {
+        intervalDisplay.textContent = `(${value} minute${value !== 1 ? "s" : ""})`;
+      }
       if (this.plugin.settings.enabled) {
         this.plugin.startSync();
       }
@@ -372,6 +414,19 @@ var FileMapperSettingTab = class extends import_obsidian.PluginSettingTab {
     })));
     new import_obsidian.Setting(containerEl).setName("File Type Field").addText((text) => text.setPlaceholder("type").setValue(fieldMappings.fileType).onChange((value) => __async(this, null, function* () {
       this.plugin.settings.fieldMappings.fileType = value;
+      yield this.plugin.saveSettings();
+    })));
+    new import_obsidian.Setting(containerEl).setName("Date & Time Format").setHeading();
+    new import_obsidian.Setting(containerEl).setName("Date Format").setDesc("Format: YYYY-MM-DD, DD/MM/YYYY, etc.").addText((text) => text.setPlaceholder("YYYY-MM-DD").setValue(this.plugin.settings.dateFormat).onChange((value) => __async(this, null, function* () {
+      this.plugin.settings.dateFormat = value;
+      yield this.plugin.saveSettings();
+    })));
+    new import_obsidian.Setting(containerEl).setName("Include Time").setDesc("Include time in date fields").addToggle((toggle) => toggle.setValue(this.plugin.settings.dateIncludeTime).onChange((value) => __async(this, null, function* () {
+      this.plugin.settings.dateIncludeTime = value;
+      yield this.plugin.saveSettings();
+    })));
+    new import_obsidian.Setting(containerEl).setName("Size Unit").setDesc("Unit for file size display").addDropdown((dropdown) => dropdown.addOption("bytes", "Bytes").addOption("KB", "KB").addOption("MB", "MB").addOption("GB", "GB").setValue(this.plugin.settings.sizeUnit).onChange((value) => __async(this, null, function* () {
+      this.plugin.settings.sizeUnit = value;
       yield this.plugin.saveSettings();
     })));
     new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Sync Now").onClick(() => __async(this, null, function* () {

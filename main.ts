@@ -14,6 +14,9 @@ interface FileMapperSettings {
   };
   syncInterval: number;
   enabled: boolean;
+  dateFormat: string;
+  dateIncludeTime: boolean;
+  sizeUnit: string;
 }
 
 interface SourceFile {
@@ -38,7 +41,10 @@ const DEFAULT_SETTINGS: FileMapperSettings = {
     fileType: 'type'
   },
   syncInterval: 30,
-  enabled: false
+  enabled: false,
+  dateFormat: 'YYYY-MM-DD',
+  dateIncludeTime: false,
+  sizeUnit: 'KB'
 };
 
 declare global {
@@ -105,6 +111,39 @@ export default class FileMapperPlugin extends Plugin {
       }
     } catch (e) {}
     return null;
+  }
+
+  private formatDate(date: Date, format: string, includeTime: boolean): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    
+    let result = format
+      .replace('YYYY', String(year))
+      .replace('MM', month)
+      .replace('DD', day);
+    
+    if (includeTime) {
+      result += ` ${hours}:${minutes}:${seconds}`;
+    }
+    
+    return result;
+  }
+
+  private formatSize(sizeInBytes: number, unit: string): string {
+    switch(unit) {
+      case 'GB':
+        return (sizeInBytes / (1024 * 1024 * 1024)).toFixed(2);
+      case 'MB':
+        return (sizeInBytes / (1024 * 1024)).toFixed(2);
+      case 'KB':
+        return (sizeInBytes / 1024).toFixed(2);
+      default:
+        return String(sizeInBytes);
+    }
   }
 
   async syncFiles() {
@@ -270,12 +309,14 @@ export default class FileMapperPlugin extends Plugin {
   }
 
   generateFileContent(file: SourceFile, fieldMappings: FileMapperSettings['fieldMappings']): string {
+    const { dateFormat, dateIncludeTime, sizeUnit } = this.settings;
+    
     const lines = ['---'];
     lines.push(`${fieldMappings.fileName}: "${file.name}"`);
     lines.push(`${fieldMappings.filePath}: "${file.path}"`);
-    lines.push(`${fieldMappings.fileSize}: ${file.size}`);
-    lines.push(`${fieldMappings.createdDate}: ${file.created.toISOString()}`);
-    lines.push(`${fieldMappings.modifiedDate}: ${file.modified.toISOString()}`);
+    lines.push(`${fieldMappings.fileSize}: ${this.formatSize(file.size, sizeUnit)} ${sizeUnit}`);
+    lines.push(`${fieldMappings.createdDate}: ${this.formatDate(file.created, dateFormat, dateIncludeTime)}`);
+    lines.push(`${fieldMappings.modifiedDate}: ${this.formatDate(file.modified, dateFormat, dateIncludeTime)}`);
     lines.push(`${fieldMappings.fileType}: "${file.extension}"`);
     lines.push('---');
     lines.push('');
@@ -312,13 +353,13 @@ class FileMapperSettingTab extends PluginSettingTab {
         }));
     
     new Setting(containerEl)
-      .setName('Source Paths')
-      .setDesc('Comma-separated list of source directories to scan')
-      .addText(text => text
-        .setPlaceholder('/path/to/documents')
-        .setValue(this.plugin.settings.sourcePaths.join(', '))
+      .setName('Source Paths (Multiple)')
+      .setDesc('Add multiple paths, one per line. Files from all paths will be mapped.')
+      .addTextArea(text => text
+        .setPlaceholder('/path/to/documents\n/other/path')
+        .setValue(this.plugin.settings.sourcePaths.join('\n'))
         .onChange(async (value) => {
-          this.plugin.settings.sourcePaths = value.split(',').map(p => p.trim());
+          this.plugin.settings.sourcePaths = value.split('\n').map(p => p.trim()).filter(p => p);
           await this.plugin.saveSettings();
         }));
     
@@ -344,19 +385,33 @@ class FileMapperSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
     
-    new Setting(containerEl)
+    const intervalSetting = new Setting(containerEl)
       .setName('Sync Interval')
-      .setDesc('How often to check for changes (in minutes)')
-      .addSlider(slider => slider
-        .setLimits(1, 60, 5)
-        .setValue(this.plugin.settings.syncInterval)
-        .onChange(async (value) => {
-          this.plugin.settings.syncInterval = value;
-          await this.plugin.saveSettings();
-          if (this.plugin.settings.enabled) {
-            this.plugin.startSync();
-          }
-        }));
+      .setDesc('How often to check for changes');
+    
+    let intervalDisplay: HTMLElement;
+    intervalSetting.descEl.createSpan({}, (span) => {
+      span.style.display = 'inline-block';
+      span.style.marginLeft = '8px';
+      span.style.color = 'var(--text-muted)';
+      intervalDisplay = span;
+      const mins = this.plugin.settings.syncInterval;
+      span.textContent = `(${mins} minute${mins !== 1 ? 's' : ''})`;
+    });
+    
+    intervalSetting.addSlider(slider => slider
+      .setLimits(1, 60, 5)
+      .setValue(this.plugin.settings.syncInterval)
+      .onChange(async (value) => {
+        this.plugin.settings.syncInterval = value;
+        await this.plugin.saveSettings();
+        if (intervalDisplay) {
+          intervalDisplay.textContent = `(${value} minute${value !== 1 ? 's' : ''})`;
+        }
+        if (this.plugin.settings.enabled) {
+          this.plugin.startSync();
+        }
+      }));
     
     new Setting(containerEl)
       .setName('YAML Field Mappings')
@@ -421,6 +476,45 @@ class FileMapperSettingTab extends PluginSettingTab {
         .setValue(fieldMappings.fileType)
         .onChange(async (value) => {
           this.plugin.settings.fieldMappings.fileType = value;
+          await this.plugin.saveSettings();
+        }));
+    
+    new Setting(containerEl)
+      .setName('Date & Time Format')
+      .setHeading();
+    
+    new Setting(containerEl)
+      .setName('Date Format')
+      .setDesc('Format: YYYY-MM-DD, DD/MM/YYYY, etc.')
+      .addText(text => text
+        .setPlaceholder('YYYY-MM-DD')
+        .setValue(this.plugin.settings.dateFormat)
+        .onChange(async (value) => {
+          this.plugin.settings.dateFormat = value;
+          await this.plugin.saveSettings();
+        }));
+    
+    new Setting(containerEl)
+      .setName('Include Time')
+      .setDesc('Include time in date fields')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.dateIncludeTime)
+        .onChange(async (value) => {
+          this.plugin.settings.dateIncludeTime = value;
+          await this.plugin.saveSettings();
+        }));
+    
+    new Setting(containerEl)
+      .setName('Size Unit')
+      .setDesc('Unit for file size display')
+      .addDropdown(dropdown => dropdown
+        .addOption('bytes', 'Bytes')
+        .addOption('KB', 'KB')
+        .addOption('MB', 'MB')
+        .addOption('GB', 'GB')
+        .setValue(this.plugin.settings.sizeUnit)
+        .onChange(async (value) => {
+          this.plugin.settings.sizeUnit = value;
           await this.plugin.saveSettings();
         }));
     

@@ -180,8 +180,10 @@
       "bases:新建数据库": false
     }
   },
-  "active": "aadd13745c4425c1",
+  "active": "4673dff28a391483",
   "lastOpenFiles": [
+    "main.ts",
+    "tests/new-features.js",
     "Mapped Files/“5G+车联网”安全：需求与挑战.md",
     "Mapped Files/《数据挖掘与数据化运营实战 思路、方法、技巧与应用》.(卢辉).[PDF]@jb51.net.md",
     "Mapped Files/【#数字经济#】中国数字经济发展研究报告 信通院 2023.md",
@@ -207,7 +209,6 @@
     "Mapped Files/张鹏SC-300.md",
     "Mapped Files/张鹏AZ-104.md",
     "Mapped Files/认证墙.md",
-    "Mapped Files/麦肯锡：全球供应链将出现重组 Risk, resilience, and rebalancing in global value chains.md",
     "Mapped Files"
   ]
 }
