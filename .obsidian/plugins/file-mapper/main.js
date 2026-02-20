@@ -180,11 +180,18 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
       const added = scannedFiles.filter((f) => !existingSourcePaths.has(f.sourcePath));
       const deleted = existingFiles.filter((f) => !scannedSourcePaths.has(f.sourcePath));
       const findSourceBasePath = (filePath, sourcePaths2) => {
+        let bestMatch = "";
+        let bestMatchLen = 0;
         for (const sp of sourcePaths2) {
-          if (filePath.startsWith(sp))
-            return sp;
+          const normalizedSp = sp.replace(/[\/\\]+$/, "");
+          const normalizedPath = filePath.replace(/[\/\\]+$/, "");
+          const isBoundary = normalizedPath === normalizedSp || normalizedPath.startsWith(normalizedSp + "/") || normalizedPath.startsWith(normalizedSp + "\\");
+          if (isBoundary && normalizedSp.length > bestMatchLen) {
+            bestMatch = normalizedSp;
+            bestMatchLen = normalizedSp.length;
+          }
         }
-        return sourcePaths2[0] || "";
+        return bestMatch || sourcePaths2[0] || "";
       };
       for (const file of deleted) {
         yield this.deleteMappedFile(targetPath, file.path);
@@ -244,7 +251,7 @@ var FileMapperPlugin = class extends import_obsidian.Plugin {
                 name: child.basename,
                 path: child.path,
                 sourcePath: frontmatter["source_path"] || "",
-                sourceMtime: parseInt(frontmatter["source_mtime"]) || 0,
+                sourceMtime: parseFloat(frontmatter["source_mtime"]) || 0,
                 size: 0,
                 created: new Date(child.stat.ctime),
                 modified: new Date(child.stat.mtime),

@@ -163,10 +163,20 @@ export default class FileMapperPlugin extends Plugin {
     const deleted = existingFiles.filter(f => !scannedSourcePaths.has(f.sourcePath));
     
     const findSourceBasePath = (filePath: string, sourcePaths: string[]): string => {
+      let bestMatch = '';
+      let bestMatchLen = 0;
       for (const sp of sourcePaths) {
-        if (filePath.startsWith(sp)) return sp;
+        const normalizedSp = sp.replace(/[\/\\]+$/, '');
+        const normalizedPath = filePath.replace(/[\/\\]+$/, '');
+        const isBoundary = normalizedPath === normalizedSp || 
+                          normalizedPath.startsWith(normalizedSp + '/') || 
+                          normalizedPath.startsWith(normalizedSp + '\\');
+        if (isBoundary && normalizedSp.length > bestMatchLen) {
+          bestMatch = normalizedSp;
+          bestMatchLen = normalizedSp.length;
+        }
       }
-      return sourcePaths[0] || '';
+      return bestMatch || sourcePaths[0] || '';
     };
     
     for (const file of deleted) {
@@ -231,7 +241,7 @@ export default class FileMapperPlugin extends Plugin {
               name: child.basename,
               path: child.path,
             sourcePath: frontmatter['source_path'] || '',
-            sourceMtime: parseInt(frontmatter['source_mtime']) || 0,
+            sourceMtime: parseFloat(frontmatter['source_mtime']) || 0,
               size: 0,
               created: new Date(child.stat.ctime),
               modified: new Date(child.stat.mtime),
