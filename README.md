@@ -18,6 +18,8 @@ File Mapper is an Obsidian plugin that automatically maps local files from exter
 - **Flexible Date Formatting** - Customize date format (YYYY-MM-DD, DD/MM/YYYY, etc.) with optional time
 - **Size Unit Selection** - Display file sizes in Bytes, KB, MB, or GB
 - **Path-Based Frontmatter Rules** - Add extra metadata (e.g., `topic: ai`) based on source path
+- **System Tags (macOS)** - Import Finder tags into frontmatter
+- **Non-blocking Sync** - Large scans yield to the UI for better responsiveness
 
 ### What It Maps
 
@@ -92,6 +94,11 @@ Customize the YAML frontmatter field names:
 | `created` | Creation date |
 | `modified` | Last modified date |
 | `type` | File extension |
+| `tags` | Finder tags (if enabled) |
+
+### System Tags (macOS)
+
+Enable **Include System Tags** to read Finder tags from source files and merge them into the `tags` field (or your custom name).
 
 ### Path Rules
 
@@ -117,6 +124,12 @@ Example path match:
 ### Frontmatter Merge Behavior
 
 On sync, the plugin preserves existing frontmatter and note body. It only updates plugin-managed fields (file name/path/size/dates/type). Path rules fill missing fields without overwriting your manual edits.
+
+### Internal Fields
+
+The plugin also writes stable internal fields to keep matching reliable even if you rename your YAML field mappings:
+- `source_path`
+- `source_mtime`
 
 ### Date & Time Format
 
@@ -177,10 +190,14 @@ For a PDF file at `/Users/username/Documents/report.pdf`, the plugin creates:
 ---
 title: "report"
 path: "/Users/username/Documents/report.pdf"
+source_path: "/Users/username/Documents/report.pdf"
+source_mtime: 1708473600000
 size: 2.50 MB
 created: 2024-02-20
 modified: 2024-02-21
 type: ".pdf"
+tags:
+  - research
 topic: ai
 ---
 [report](file:///Users/username/Documents/report.pdf)
@@ -189,6 +206,7 @@ topic: ai
 ## Limitations
 
 - **Desktop Only**: File system access requires desktop Obsidian
+- **macOS Tags Only**: System tags rely on `mdls`, so Finder tags are macOS-only
 - **Read-only Links**: Opens files in their default application
 - **No Content**: Mapped files contain only metadata and links, not file content
 
