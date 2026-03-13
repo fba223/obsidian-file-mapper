@@ -6,7 +6,8 @@
   "scripts": {
     "build": "esbuild main.ts --bundle --outfile=main.js --target=es2016 --format=cjs --external:obsidian --external:electron --external:fs --external:path",
     "dev": "esbuild main.ts --bundle --outfile=main.js --target=es2016 --format=cjs --external:obsidian --external:electron --external:fs --external:path --watch",
-    "test": "node tests/run.js"
+    "test": "node tests/run.js",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
   },
   "keywords": ["obsidian", "obsidian-plugin", "file-mapper"],
   "author": "",

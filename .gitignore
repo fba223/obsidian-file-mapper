@@ -2,6 +2,7 @@
 node_modules/
 
 # Build
+main.js
 *.js.map
 
 # OS
