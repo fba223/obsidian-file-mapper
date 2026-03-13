@@ -1,8 +1,10 @@
 {
-  "id": "file-mapper",
-  "name": "File Mapper",
-  "version": "1.0.0",
-  "description": "Map local files to Obsidian with custom YAML frontmatter",
-  "author": "",
-  "isDesktopOnly": false
+	"id": "file-mapper",
+	"name": "File Mapper",
+	"version": "1.0.0",
+	"minAppVersion": "1.0.0",
+	"description": "Map local files to Obsidian with custom YAML frontmatter",
+	"author": "fba223",
+	"authorUrl": "https://github.com/fba223",
+	"isDesktopOnly": true
 }
